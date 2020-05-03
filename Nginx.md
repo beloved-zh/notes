@@ -475,3 +475,109 @@ upstream myserver{
 	fair;
 }
 ```
+
+# 7、Nginx安装SSL证书
+
+参考文章：https://help.aliyun.com/document_detail/98728.html?spm=5176.2020520163.0.0.467256a74qa47M
+
+- 在Nginx的安装目录下(默认目录`/usr/local/nginx/cong`)创建`cert`文件夹，将ssl证书文件拷贝进去
+
+- 修改`nginx.conf`配置文件
+
+```bash
+# HTTPS server
+server {
+	listen 443 ssl;   #SSL协议访问端口号为443。此处如未添加ssl，可能会造成Nginx无法启动。
+	server_name beloved.ink;  #将localhost修改为您证书绑定的域名，例如：www.example.com。
+	root html;
+	index index.html index.htm;
+	ssl_certificate cert/3837434_www.beloved.ink.pem;   #将domain name.pem替换成您证书的文件名。
+	ssl_certificate_key cert/3837434_www.beloved.ink.key;   #将domain name.key替换成您证书的密钥文件名。
+	ssl_session_timeout 5m;
+	ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;  #使用此加密套件。
+	ssl_protocols TLSv1 TLSv1.1 TLSv1.2;   #使用该协议进行配置。
+	ssl_prefer_server_ciphers on;   
+	location / {
+		proxy_pass  http://answer;   #站点目录。
+		index index.html index.htm;   
+	}
+}
+```
+- 重启Nginx
+
+**错误问题**
+
+![image-20200503211621921](http://image.beloved.ink/Typora/image-20200503211621921.png)
+
+**可能是ssl模块未安装。默认情况下ssl模块并未被安装，如果要使用该模块则需要在编译nginx时指定–with-http_ssl_module参数**
+
+**解决方案：**
+
+- 切换到源码包
+
+  ```bash
+  cd /usr/local/src/nginx-1.6.2
+  ```
+
+- 查看nginx原有的模块
+
+  ```bash
+  /usr/local/nginx/sbin/nginx -V
+  ```
+
+  在`configure arguments:`后面显示的就是安装的模块。查看有无ssl模块
+
+- 安装ssl模块
+
+  ```bash
+  ./configure --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module
+  ```
+
+- 配置完成后，运行命令
+
+  ```bash
+  make
+  ```
+
+  **这里不要进行make install，否则就是覆盖安装**
+
+- 备份原有已安装好的Nginx
+
+  ```bash
+  cp /usr/local/nginx/sbin/nginx /usr/local/nginx/sbin/nginx.bak
+  ```
+
+- 将刚刚编译好的nginx覆盖掉原有的nginx（**这个时候nginx要停止状态。如果不能正常关闭，查看进程，杀pid**）
+
+  ```bash
+  cp ./objs/nginx /usr/local/nginx/sbin/
+  ```
+
+- 然后启动nginx，查看是否加入成
+
+  ```bash
+  /usr/local/nginx/sbin/nginx -V
+  ```
+
+  ![image-20200503213720699](http://image.beloved.ink/Typora/image-20200503213720699.png)
+
+- 测试访问
+
+  ![image-20200503213814161](http://image.beloved.ink/Typora/image-20200503213814161.png)
+
+# 8、配置Http自动跳转Https
+
+**在需要跳转的HTTP站点下添加以下rewrite语句，实现HTTP访问自动跳转到HTTPS页面**
+
+```bash
+server {
+        listen       80;
+        server_name  beloved.ink;  #  #将localhost修改为证书绑定的域名
+
+        location / {
+			rewrite ^(.*)$ https://$host$1 permanent;   #将所有http请求通过rewrite重定向到https。
+			proxy_pass  http://answer;
+        }
+}
+```
+
