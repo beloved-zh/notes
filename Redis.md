@@ -2408,47 +2408,208 @@ appendfsync everysec     # 每秒执行一次sync，可能会丢失最后一秒�
 # appendfsync no		 # 不执行sync，这时操作系统自己同步数据
 ```
 
+# 12、持久化
+
+Redis是内存数据库，如果不将内存中的数据保存到磁盘，那么一旦都武器进程退出，服务器中的数据也会消失
+
+## RDB（Redis DataBase）
+
+![image-20200506191531733](http://image.beloved.ink/Typora/image-20200506191531733.png)
+
+在指定的时间间隔内将内存中的数据集快照写入磁盘，也就是Snapshot快照，它恢复时是将快照文件直接读到内存里。
+
+Redis会单独创建（fork）一个进程来进行持久化，会先将数据写入到一个临时文件中，待持久化过程都结束了，在用这个临时文件替换上次持久化好的文件。整个过程中，主进程是不进行任何IO操作的。这就确保了极高的性能。如果需要进行大规模数据恢复，且对于数据恢复的完整性不是非常敏感，那么RDB方式比AOF方式更加高效。RDB的缺点是最后一次持久化后的数据可能丢失。默认就是RDB方式
+
+==RDB默认保存的文件是：dump.rdb==
+
+![image-20200506192713581](http://image.beloved.ink/Typora/image-20200506192713581.png)
+
+![image-20200506195828232](http://image.beloved.ink/Typora/image-20200506195828232.png)
+
+**触发机制：**
+
+- save的规则满足的情况下，会触发RDB规则
+- 执行flushall命令，也会触发RDB规则
+- 退出redis，也会产生RDB文件
+
+备份就会自动在redis启动目录生成dump.rdb文件
+
+![image-20200506200217733](http://image.beloved.ink/Typora/image-20200506200217733.png)
+
+**数据恢复：**
+
+- 只需要将rdb文件放到redis启动目录即可，redis启动的时候会自动检查dump.rdb恢复其中的数据
+
+- 查看需要存放的目录
+
+  ```bash
+  127.0.0.1:6379> config get dir
+  1) "dir"
+  2) "/usr/local/redis/bin"   # 如果在这个目录存在rdb文件，启动的时候自动恢复rdb的数据
+  ```
+
+**优点：**
+
+- 适合大规模的数据恢复
+- 对数据的完整性要求不高
+
+**缺点：**
+
+- 需要一定的时间间隔进行操作！如果redis意外宕机，这个最后一次修改的数据就没有了
+- fork进程的时候，会占用一定的内存空间
+
+## AOF（Append Only File）
+
+将所有写的命令以文件的方式记录下来，恢复的时候全部执行一遍
+
+![image-20200506201220314](http://image.beloved.ink/Typora/image-20200506201220314.png)
+
+以日志的形式来==记录每个写操作==，将Redis执行过程中的所有指令记录下来，只许追加文件但不可以改写文件，Redis启动之初会读取该文件重新构建数据。就是，Redis启动的时候根据日志文件的内容将写指令从前到后全部执行一次，以恢复数据
+
+==AOF保存的是 appendonly.aof文件==
+
+**配置：**
+
+![image-20200506202033269](http://image.beloved.ink/Typora/image-20200506202033269.png)
+
+一般只需要开启就可以。将appendonly设置为yes，其余默认配置
+
+**aof文件生成在redis启动目录下。里面保存的是写的指令**
+
+![image-20200506202550939](http://image.beloved.ink/Typora/image-20200506202550939.png)
+
+![image-20200506202631782](http://image.beloved.ink/Typora/image-20200506202631782.png)
+
+**如果aof文件被损坏。连接Redis的时候会报错。这时要修复aof文件**
+
+![image-20200506203154836](http://image.beloved.ink/Typora/image-20200506203154836.png)
+
+![image-20200506203337858](http://image.beloved.ink/Typora/image-20200506203337858.png)
+
+**Redis提供了aof修复工具**
+
+![image-20200506203616905](http://image.beloved.ink/Typora/image-20200506203616905.png)
+
+```bash
+./redis-check-aof --fix appendonly.aof
+```
+
+![image-20200506203814370](http://image.beloved.ink/Typora/image-20200506203814370.png)
+
+![image-20200506203908496](http://image.beloved.ink/Typora/image-20200506203908496.png)
+
+文件正常重启就可以直接恢复
+
+![image-20200506204042890](http://image.beloved.ink/Typora/image-20200506204042890.png)
 
 
 
+**重写规则说明：**aof默认是文件的无限追加，文件会越来越大
+
+![image-20200506204820468](http://image.beloved.ink/Typora/image-20200506204820468.png)
+
+如果aof文件大于64mb，太大了！fork一个新的进程来将文件重写 
+
+**优点：**
+
+-  每一次修改都会同步，文件的完整性更好
+- 每秒同步一次，肯会丢失一秒的数据
+- 从不同步，效率最高
+
+**缺点：**
+
+- 相对于数据文件来说，aof远远大于rdb，修复的速度也比rdb慢
+- Aof运行效率要比rdb慢
+
+## 扩展
+
+1. RDB持久化方式能够在指定的时间间隔内对数据进行快照存储
+2. AOF持久化方式记录每次对服务器写的操作，当服务器重启的时候会重新执行这些命令来恢复原始的数据，AOF命令以Redis协议追加保存每次写的操作到文件末尾，Redis还能对AOF文件进行后台重写，是AOF文件的体积不至于过大
+3. 只做缓存，如果只希望数据在服务器运行的时候存在，可以使用持久化
+4. 同时开启两种持久化方式
+   - 在这种情况下,当redis重启的时候会优先载入AOF件来恢复原始的数据,因为在通常情况下AOF件保存的数据集要RDB文件保存的数据集要完整。
+   - RDB的数据不实时,同时使用两者时服务器重启也只会找AOF文件,那要不要只使用AOF呢?作者建议不要,因为RDB更适合用于备份数据库(AOF在不断变化不好备份),快速重启,而且不会有AOF可能潜在的Bug。留着作为一个万一的手段
+5. 性能建议
+   - 因为RDB文件只用作后备用途,建议只在Slave上持久化RDB文件,而且只要15分钟备份一次就够了,只保留save  900  1这条规则。
+   - 如果Enable AOF,好处是在最恶劣情况下也只会丢失不超过两秒数据,启动脚本较简单只load自己的AOF文件就可以了，代价一是带来了持续的IO,二是AOF rewrite的最后将rewrte过程中产生的新数据写到新文件造成的阻塞几乎是不可避免的。只要硬盘许可,应该尽量减少AOF rewrte的频率,AOF重写的基础大小默认值64M太小了,可以设到5G以、默以超过原大小100%重与可以放到适当的数值。
+   - 如果不Enabl AOF ,仅靠Master-Ssave Replcaton实现高可用性也可以,能省掉一大笔IO,也减少了rewrite时带来的系统波动。代价是如果Master/Slave 同时倒掉,会丢失十几分钟的数据,启动脚本也要比较两个Master/Save 中的RDB文件,载入较新的那个,微博就是这种架构。
 
 
+# 13、Redis发布订阅 
 
+Redis发布订阅（pub/sub）是一种==消息通信模式==：发送者(pub)发送消息，订阅者(sub)接收消息
 
+Redis客户端可以订阅任意数量的频道
 
+订阅/发布消息图：
 
+![image-20200506211804493](http://image.beloved.ink/Typora/image-20200506211804493.png)
 
+下表列出了 redis 发布订阅常用命令：https://www.runoob.com/redis/redis-pub-sub.html
 
+![image-20200506212040497](http://image.beloved.ink/Typora/image-20200506212040497.png)
 
+**订阅端：**
 
+```bash
+127.0.0.1:6379> subscribe Beloved				# 订阅一个频道  Beloved
+Reading messages... (press Ctrl-C to quit)
+1) "subscribe"
+2) "Beloved"
+3) (integer) 1
+# 等待读取推送的消息
+1) "message"	# 消息
+2) "Beloved"	# 那个频道的消息
+3) "hello"		# 消息的具体内容
 
+1) "message"
+2) "Beloved"
+3) "hello redis"
+```
 
+**发布端：**
 
+```bash
+127.0.0.1:6379> publish Beloved hello		# 发布者发送消息到频道
+(integer) 1
+127.0.0.1:6379> publish Beloved "hello redis"
+(integer) 1
+127.0.0.1:6379>
+```
 
+**原理：**
 
+Redis是使用C实现的,通过分析 Redis 源码里的pubsub.c文件,了解发布和订阅机制的底层实现,籍此加深对Redis的理解。
 
+Redis通过PUBLISH、SUBSCRIBE和PSUBSCRIBE等命令实现发布和订阅功能。
 
+通过SUBSCREE命令订阅某频道后, redis-server里维护了一个字典,字典的键就是一个个频道,而字典的值则是一个链表,链表中保存了所有订阅这个channel 的客户端。 SUBSCRIBE命令的关键,就是将客户端添加到给定channel 的订阅链表中。
 
+通过PUBLISH命令向订阅者发送消息,redis-server 会使用给定的频道作为键,在它所维护的channel字典中查找记录了订阅这个频道的所有客户端的链表,遍历这个链表,将消息发布给所有订阅者。
 
+Pub/Sub从字面上理解就是发布(Publish)与订阅(Suscribe),在Redis中,你可以设定对某一个Key值进行消息发布及消息订阅,当一个key值上进行了消息发布后,所有订阅它的客户端都会收到相应的消息。这一功能最明显的用法就是用就是用作实时消息系统，比如普通的即时聊天，群聊等功能
 
+# 14、主从复制
 
+**概念**
 
+主从复制,是指将一台 Redis服务器的数据,复制到其他的 Redis服务器。前者称为主节点( master/ leader),后者称为从节点( slave/follower);==数据的复制是单向的,只能由主节点到从节点。== Master以写为主,Save以读为主。
 
+==默认情况下,每台 Redis服务器都是主节点==;
 
+且一个主节点可以有多个从节点(或没有从节点),但一个从节点只能有一个主节点。
 
+主从复制的作用主要包括:
 
+-  数据冗余:主从复制实现了数据的热备份,是持久化之外的一种数据冗余方式。
+- 故障恢复:当主节点岀现问题时,可以由从节点提供服务,实现快速的故障恢复;实际上是一种服务的冗余。
+- 负载均衡:在主从复制的基础上,配合读写分离,可以由主节点提供写服务,由从节点提供读服务(即写 Redis数据时应用连接主节点,读Reds数据时应用连接从节点),分担服务器负载;尤其是在写少读多的场景下,通过多个从节点分担读负载,可以大大提高 Redis服务器的并发量。
+- 高可用基石:除了上述作用以外,主从复制还是哨兵和集群能够实施的基础,因此说主从复制是 Redis高可用的基础
 
+一般来说,要将 Redis运用于工程项目中,只使用一台 Redis是万万不能的,原因如下:
 
+- 从结构上,单个 Redis服务器会发生单点故障,并且一台服务器需要处理所有的请求负载,压力较大
+- 从容量上，单个Redis服务器内存容量有限，就算一台Redis服务器内存容量为256G，也不能将所有内存用作Redis存储内存，一般来说，==单台Redis最大使用内存不超过20G==
 
-
-
-
-
-
-
-
-
-
-
-
+**环境配置**
 
