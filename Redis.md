@@ -1328,3 +1328,1127 @@ QUEUED
 2) (integer) 40
 ```
 
+# 9、Jedis
+
+**Jedis是Redis官方推荐的Java连接开发工具！使用Java操作Redis的中间件**
+
+- 导入对应的依赖
+
+  ```xml
+  <dependencies>
+      <!--jedis -->
+      <dependency>
+          <groupId>redis.clients</groupId>
+          <artifactId>jedis</artifactId>
+          <version>3.1.0</version>
+      </dependency>
+      <dependency>
+          <groupId>com.alibaba</groupId>
+          <artifactId>fastjson</artifactId>
+          <version>1.2.60</version>
+      </dependency>
+  </dependencies>
+  ```
+
+- 编码测试
+
+  1. 连接数据库
+  2. 操作命令
+  3. 断开连接
+
+```java
+package com.zh;
+import redis.clients.jedis.Jedis;
+public class TestPing {
+
+    public static void main(String[] args) {
+        // 1. 创建Jedis对象   new Jedis()
+        Jedis jedis = new Jedis("127.0.0.1", 6379);
+
+        System.out.println(jedis.ping());
+        
+        //关闭连接
+        jedis.close();
+    }
+}
+```
+
+![image-20200506114927409](http://image.beloved.ink/Typora/image-20200506114927409.png)
+
+**所有的API用法和客户端指令都一样，将指令换为方法**
+
+**String**
+
+```java
+public static void main(String[] args) {
+
+    Jedis jedis = new Jedis("127.0.0.1",6379);
+
+    System.out.println(jedis.ping());
+
+    //请空数据库
+    jedis.flushDB();
+
+    //设置值
+    System.out.println(jedis.set("name", "Beloved"));
+    //取值
+    System.out.println(jedis.get("name"));
+    //查看所有key
+    System.out.println(jedis.keys("*"));
+    //判断某个key是否存在
+    System.out.println(jedis.exists("k1"));
+    System.out.println(jedis.exists("name"));
+
+    System.out.println(jedis.set("k1", "1"));
+    //自增
+    System.out.println(jedis.incr("k1"));
+    //自减
+    System.out.println(jedis.decr("k1"));
+    //设置k2十秒后过期
+    System.out.println(jedis.setex("k2", 10, "abc"));
+
+    // 休眠十秒
+    for (int i = 0;i < 10;i++){
+        try {
+            //查询剩余时间
+            System.out.println(jedis.ttl("k2"));
+            Thread.sleep(1000);  //1000毫秒就是1秒
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    System.out.println(jedis.get("k2"));
+
+    //批量创建获取
+    System.out.println(jedis.mset("k3", "v3", "k4", "v4"));
+    System.out.println(jedis.mget("k3", "k4"));
+
+    jedis.close();
+
+}
+```
+
+**List**
+
+```java
+public static void main(String[] args) {
+    Jedis jedis = new Jedis("127.0.0.1",6379);
+
+    jedis.flushDB();
+
+    //存值
+    System.out.println(jedis.lpush("list", "a", "b", "c"));
+    System.out.println(jedis.rpush("list", "1", "2", "3"));
+    //取值
+    System.out.println(jedis.lrange("list", 0, -1));
+    //移除
+    System.out.println(jedis.lpop("list"));
+    System.out.println(jedis.rpop("list"));
+    System.out.println(jedis.lrange("list", 0, -1));
+
+    //取指定下标值
+    System.out.println(jedis.lindex("list", 1));
+    //替换指定下标的值
+    System.out.println(jedis.lset("list", 1, "aa"));
+    //获取长度
+    System.out.println(jedis.llen("list"));
+    //删除指定的值
+    System.out.println(jedis.lrem("list", 1, "b"));
+    System.out.println(jedis.lrange("list", 0, -1));
+
+    jedis.close();
+}
+```
+
+**Set**
+
+```java
+public static void main(String[] args) {
+
+    Jedis jedis = new Jedis("127.0.0.1",6379);
+
+    jedis.flushDB();
+
+    //存值取值
+    System.out.println(jedis.sadd("set", "a", "b", "c", "a"));
+    System.out.println(jedis.smembers("set"));
+
+    //判断某个值是否存在在set集合中
+    System.out.println(jedis.sismember("set", "a"));
+    System.out.println(jedis.sismember("set", "d"));
+
+    //获取set内容个数
+    System.out.println(jedis.scard("set"));
+    //随机一个或多个元素
+    System.out.println(jedis.srandmember("set", 1));
+
+    //删除指定
+    System.out.println(jedis.srem("set", "a"));
+    //随机删除
+    System.out.println(jedis.spop("set", 1));
+
+    System.out.println(jedis.smembers("set"));
+
+    jedis.flushDB();
+    System.out.println(jedis.sadd("set1", "a", "b", "c"));
+    System.out.println(jedis.sadd("set2", "c", "d" ,"e"));
+    //差集
+    System.out.println(jedis.sdiff("set1", "set2"));
+    System.out.println(jedis.sdiff("set2", "set1"));
+    //交集
+    System.out.println(jedis.sinter("set1", "set2"));
+    //并集
+    System.out.println(jedis.sunion("set1", "set2"));
+
+    jedis.close();
+
+}
+```
+
+**Hash**
+
+```java
+public static void main(String[] args) {
+
+    Jedis jedis = new Jedis("127.0.0.1", 6379);
+
+    jedis.flushDB();
+
+    Map<String,String> map = new HashMap<String, String>();
+    map.put("k1","v1");
+    map.put("k2","v2");
+    map.put("k3","v3");
+
+    System.out.println(jedis.hmset("hash", map));
+    System.out.println(jedis.hmget("hash", "k1"));
+    System.out.println(jedis.hgetAll("hash"));
+    System.out.println(jedis.hlen("hash"));
+    System.out.println(jedis.hexists("hash", "k1"));
+    System.out.println(jedis.hexists("hash", "k4"));
+
+    System.out.println(jedis.hkeys("hash"));
+    System.out.println(jedis.hvals("hash"));
+
+    jedis.close();
+
+}
+```
+
+**Zset**
+
+```java
+public static void main(String[] args) {
+
+        Jedis jedis = new Jedis("127.0.0.1", 6379);
+
+        jedis.flushDB();
+
+        System.out.println(jedis.zadd("zset", 5, "a"));
+        System.out.println(jedis.zadd("zset", 4, "b"));
+        System.out.println(jedis.zadd("zset", 6, "c"));
+        System.out.println(jedis.zadd("zset", 8, "d"));
+
+        System.out.println(jedis.zrange("zset", 0, -1));
+
+        System.out.println(jedis.zrangeByScore("zset", "-inf", "+inf"));
+
+        jedis.close();
+
+    }
+
+}
+```
+
+**事务**
+
+```java
+public static void main(String[] args) {
+    Jedis jedis = new Jedis("127.0.0.1", 6379);
+
+    jedis.flushDB();
+
+    JSONObject json = new JSONObject();
+    json.put("name","Beloved");
+    json.put("age","20");
+    String s = json.toString();
+
+    Transaction multi = jedis.multi();    // 开启事务
+
+    try {
+
+         multi.set("user1",s);
+        multi.set("user2",s);
+
+        int i = 1/0;    //抛出异常
+
+        multi.exec();                      //执行事务
+
+    }catch (Exception e){
+        multi.discard();                    //放弃事务
+        e.printStackTrace();
+    }finally {
+        System.out.println(jedis.get("user1"));
+        System.out.println(jedis.get("user2"));
+
+        jedis.close();                      //关闭连接
+    }
+}
+```
+
+# 10、SpringBoot整合
+
+**在SpringBoot2.x之后，原来使用的Jedis被替换成了Lettuce**
+
+Jedis：采用的直连，多个线程操作，是不安全的，如果想要避免需要使用Jedis pool连接池！更像 BIO
+
+Lettuce：采用entty，实例可以在多个线程中进行共享，不存在线程不安全的情况，可以减少线程数据，更像 NIO
+
+**源码分析：**
+
+`RedisAutoConfiguration.java`
+
+```java
+@Bean
+@ConditionalOnMissingBean(name = "redisTemplate") //可以自定义redisTemplate来替换默认的
+public RedisTemplate<Object, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory)
+      throws UnknownHostException {
+    //默认的RedisTemplate没有过的设置，redis对象都是需要序列化的
+    //两个泛型都是<Object, Object>的类型，使用的时候要强制转化<String, Object>
+   RedisTemplate<Object, Object> template = new RedisTemplate<>();                 
+   template.setConnectionFactory(redisConnectionFactory);
+   return template;
+}
+
+@Bean
+@ConditionalOnMissingBean	//由于String 是Redis中常用的类型，所以单独设置一个Bean
+public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory redisConnectionFactory)
+      throws UnknownHostException {
+   StringRedisTemplate template = new StringRedisTemplate();
+   template.setConnectionFactory(redisConnectionFactory);
+   return template;
+}
+```
+
+> 整合测试
+
+- 导入依赖
+
+  ```xml
+  <!--Redis-->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+  </dependency>
+  ```
+
+- 配置连接
+
+  **相关配置可以在`RedisProperties`类中查看**
+
+  ```properties
+  # 配置Redis
+  spring.redis.host=127.0.0.1
+  spring.redis.port=6379
+  ```
+
+- 连接测试
+
+  ```java
+  @SpringBootTest
+  class Redis02SpringbootApplicationTests {
+  
+      @Autowired
+      private RedisTemplate redisTemplate;
+  
+      @Test
+      void contextLoads() {
+          /*
+           *  redisTemplate  操作不同的数据类型，api和指令是一样的
+           *  opsForValue    操作字符串，类似String
+           *  opsForList     操作list，类型list
+           *  opsForSet
+           *  opsForHash
+           *  opsForZSet
+           *  opsForGeo
+           *  opsForHyperLogLog
+           *
+           *  常用方法可以直接通过redisTemplate操作。比如：事务、CRUD
+           */
+          //获取Redis连接对象
+          RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+          System.out.println(connection.ping());
+          connection.flushDb();
+  
+          //redisTemplate.opsForValue().set("name","Beloved");
+          redisTemplate.opsForValue().set("name","张三");
+          System.out.println(redisTemplate.opsForValue().get("name"));
+  
+      }
+  
+  }
+  ```
+
+![image-20200506145736010](http://image.beloved.ink/Typora/image-20200506145736010.png)
+
+## 关于序列化 
+
+**Redis存入所以的对象都要序列化，否则会产生中文乱码**
+
+![image-20200506145917460](http://image.beloved.ink/Typora/image-20200506145917460.png)
+
+![image-20200506150112439](http://image.beloved.ink/Typora/image-20200506150112439.png)
+
+![image-20200506151102775](http://image.beloved.ink/Typora/image-20200506151102775.png)
+
+## 编写RedisTemplate
+
+```java
+//编写RedisTemplate
+@Bean
+@SuppressWarnings("all")
+public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory){
+
+    //一般使用<String, Object>类型
+    RedisTemplate<String, Object> template = new RedisTemplate<String, Object>();
+    template.setConnectionFactory(factory);
+
+    //Json序列化配置
+    Jackson2JsonRedisSerializer jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer(Object.class);
+    ObjectMapper om = new ObjectMapper();
+    om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+    om.enableDefaultTyping(ObjectMapper.DefaultTyping.NON_FINAL);
+    jackson2JsonRedisSerializer.setObjectMapper(om);
+
+    //String序列化配置
+    StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+
+    //key采用String的序列化方式
+    template.setKeySerializer(stringRedisSerializer);
+    //hash的key采用String的序列化
+    template.setHashKeySerializer(stringRedisSerializer);
+    //value采用jackson序列化方式
+    template.setValueSerializer(jackson2JsonRedisSerializer);
+    //hash的value采用jackson序列化方式
+    template.setHashValueSerializer(jackson2JsonRedisSerializer);
+    template.afterPropertiesSet();
+
+    return template;
+}
+```
+
+**测试**
+
+![image-20200506153438932](http://image.beloved.ink/Typora/image-20200506153438932.png)
+
+![image-20200506153500628](http://image.beloved.ink/Typora/image-20200506153500628.png)
+
+## 编写Redis工具类
+
+**开发中一般不使用原生的，使用工具类**
+
+```java
+package com.zh.utils;
+
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
+
+/**
+ * Redis工具类
+ */
+@Component
+public final class RedisUtil {
+
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+
+    // =============================common============================
+    /**
+     * 指定缓存失效时间
+     * @param key 键
+     * @param time 时间(秒)
+     * @return
+     */
+    public boolean expire(String key, long time) {
+        try {
+            if (time > 0) {
+                redisTemplate.expire(key, time, TimeUnit.SECONDS);
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 根据key 获取过期时间
+     * @param key 键 不能为null
+     * @return 时间(秒) 返回0代表为永久有效
+     */
+    public long getExpire(String key) {
+        return redisTemplate.getExpire(key, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 判断key是否存在
+     * @param key 键
+     * @return true 存在 false不存在
+     */
+    public boolean hasKey(String key) {
+        try {
+            return redisTemplate.hasKey(key);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 删除缓存
+     * @param key 可以传一个值 或多个
+     */
+    @SuppressWarnings("unchecked")
+    public void del(String... key) {
+        if (key != null && key.length > 0) {
+            if (key.length == 1) {
+                redisTemplate.delete(key[0]);
+            } else {
+                redisTemplate.delete(CollectionUtils.arrayToList(key));
+            }
+        }
+    }
+
+    // ============================String=============================
+    /**
+     * 普通缓存获取
+     * @param key 键
+     * @return 值
+     */
+    public Object get(String key) {
+        return key == null ? null : redisTemplate.opsForValue().get(key);
+    }
+
+    /**
+     * 普通缓存放入
+     * @param key 键
+     * @param value 值
+     * @return true成功 false失败
+     */
+    public boolean set(String key, Object value) {
+        try {
+            redisTemplate.opsForValue().set(key, value);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 普通缓存放入并设置时间
+     * @param key 键
+     * @param value 值
+     * @param time 时间(秒) time要大于0 如果time小于等于0 将设置无限期
+     * @return true成功 false 失败
+     */
+    public boolean set(String key, Object value, long time) {
+        try {
+            if (time > 0) {
+                redisTemplate.opsForValue().set(key, value, time, TimeUnit.SECONDS);
+            } else {
+                set(key, value);
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 递增
+     * @param key 键
+     * @param delta 要增加几(大于0)
+     * @return
+     */
+    public long incr(String key, long delta) {
+        if (delta < 0) {
+            throw new RuntimeException("递增因子必须大于0");
+        }
+        return redisTemplate.opsForValue().increment(key, delta);
+    }
+
+    /**
+     * 递减
+     * @param key 键
+     * @param delta 要减少几(小于0)
+     * @return
+     */
+    public long decr(String key, long delta) {
+        if (delta < 0) {
+            throw new RuntimeException("递减因子必须大于0");
+        }
+        return redisTemplate.opsForValue().increment(key, -delta);
+    }
+
+    // ================================Map=================================
+    /**
+     * HashGet
+     * @param key 键 不能为null
+     * @param item 项 不能为null
+     * @return 值
+     */
+    public Object hget(String key, String item) {
+        return redisTemplate.opsForHash().get(key, item);
+    }
+
+    /**
+     * 获取hashKey对应的所有键值
+     * @param key 键
+     * @return 对应的多个键值
+     */
+    public Map<Object, Object> hmget(String key) {
+        return redisTemplate.opsForHash().entries(key);
+    }
+
+    /**
+     * HashSet
+     * @param key 键
+     * @param map 对应多个键值
+     * @return true 成功 false 失败
+     */
+    public boolean hmset(String key, Map<String, Object> map) {
+        try {
+            redisTemplate.opsForHash().putAll(key, map);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * HashSet 并设置时间
+     * @param key 键
+     * @param map 对应多个键值
+     * @param time 时间(秒)
+     * @return true成功 false失败
+     */
+    public boolean hmset(String key, Map<String, Object> map, long time) {
+        try {
+            redisTemplate.opsForHash().putAll(key, map);
+            if (time > 0) {
+                expire(key, time);
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 向一张hash表中放入数据,如果不存在将创建
+     * @param key 键
+     * @param item 项
+     * @param value 值
+     * @return true 成功 false失败
+     */
+    public boolean hset(String key, String item, Object value) {
+        try {
+            redisTemplate.opsForHash().put(key, item, value);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 向一张hash表中放入数据,如果不存在将创建
+     * @param key 键
+     * @param item 项
+     * @param value 值
+     * @param time 时间(秒) 注意:如果已存在的hash表有时间,这里将会替换原有的时间
+     * @return true 成功 false失败
+     */
+    public boolean hset(String key, String item, Object value, long time) {
+        try {
+            redisTemplate.opsForHash().put(key, item, value);
+            if (time > 0) {
+                expire(key, time);
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 删除hash表中的值
+     * @param key 键 不能为null
+     * @param item 项 可以使多个 不能为null
+     */
+    public void hdel(String key, Object... item) {
+        redisTemplate.opsForHash().delete(key, item);
+    }
+
+    /**
+     * 判断hash表中是否有该项的值
+     * @param key 键 不能为null
+     * @param item 项 不能为null
+     * @return true 存在 false不存在
+     */
+    public boolean hHasKey(String key, String item) {
+        return redisTemplate.opsForHash().hasKey(key, item);
+    }
+
+    /**
+     * hash递增 如果不存在,就会创建一个 并把新增后的值返回
+     * @param key 键
+     * @param item 项
+     * @param by 要增加几(大于0)
+     * @return
+     */
+    public double hincr(String key, String item, double by) {
+        return redisTemplate.opsForHash().increment(key, item, by);
+    }
+
+    /**
+     * hash递减
+     * @param key 键
+     * @param item 项
+     * @param by 要减少记(小于0)
+     * @return
+     */
+    public double hdecr(String key, String item, double by) {
+        return redisTemplate.opsForHash().increment(key, item, -by);
+    }
+
+    // ============================set=============================
+    /**
+     * 根据key获取Set中的所有值
+     * @param key 键
+     * @return
+     */
+    public Set<Object> sGet(String key) {
+        try {
+            return redisTemplate.opsForSet().members(key);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * 根据value从一个set中查询,是否存在
+     * @param key 键
+     * @param value 值
+     * @return true 存在 false不存在
+     */
+    public boolean sHasKey(String key, Object value) {
+        try {
+            return redisTemplate.opsForSet().isMember(key, value);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 将数据放入set缓存
+     * @param key 键
+     * @param values 值 可以是多个
+     * @return 成功个数
+     */
+    public long sSet(String key, Object... values) {
+        try {
+            return redisTemplate.opsForSet().add(key, values);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * 将set数据放入缓存
+     * @param key 键
+     * @param time 时间(秒)
+     * @param values 值 可以是多个
+     * @return 成功个数
+     */
+    public long sSetAndTime(String key, long time, Object... values) {
+        try {
+            Long count = redisTemplate.opsForSet().add(key, values);
+            if (time > 0)
+            expire(key, time);
+            return count;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * 获取set缓存的长度
+     * @param key 键
+     * @return
+     */
+    public long sGetSetSize(String key) {
+        try {
+            return redisTemplate.opsForSet().size(key);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * 移除值为value的
+     * @param key 键
+     * @param values 值 可以是多个
+     * @return 移除的个数
+     */
+    public long setRemove(String key, Object... values) {
+        try {
+            Long count = redisTemplate.opsForSet().remove(key, values);
+            return count;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    // ===============================list=================================
+    /**
+     * 获取list缓存的内容
+     * @param key 键
+     * @param start 开始
+     * @param end 结束 0 到 -1代表所有值
+     * @return
+     */
+    public List<Object> lGet(String key, long start, long end) {
+        try {
+            return redisTemplate.opsForList().range(key, start, end);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * 获取list缓存的长度03
+     * @param key 键
+     * @return
+     */
+    public long lGetListSize(String key) {
+        try {
+            return redisTemplate.opsForList().size(key);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * 通过索引 获取list中的值
+     * @param key 键
+     * @param index 索引 index>=0时， 0 表头，1 第二个元素，依次类推；index<0时，-1，表尾，-2倒数第二个元素，依次类推
+     * @return
+     */
+    public Object lGetIndex(String key, long index) {
+        try {
+            return redisTemplate.opsForList().index(key, index);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * 将list放入缓存
+     * @param key 键
+     * @param value 值
+     * @return
+     */
+    public boolean lSet(String key, Object value) {
+        try {
+            redisTemplate.opsForList().rightPush(key, value);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 将list放入缓存
+     * @param key 键
+     * @param value 值
+     * @param time 时间(秒)
+     * @return
+     */
+    public boolean lSet(String key, Object value, long time) {
+        try {
+            redisTemplate.opsForList().rightPush(key, value);
+            if (time > 0)
+                expire(key, time);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 将list放入缓存
+     * @param key 键
+     * @param value 值
+     * @return
+     */
+    public boolean lSet(String key, List<Object> value) {
+        try {
+            redisTemplate.opsForList().rightPushAll(key, value);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 将list放入缓存
+     *
+     * @param key 键
+     * @param value 值
+     * @param time 时间(秒)
+     * @return
+     */
+    public boolean lSet(String key, List<Object> value, long time) {
+        try {
+            redisTemplate.opsForList().rightPushAll(key, value);
+            if (time > 0)
+                expire(key, time);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 根据索引修改list中的某条数据
+     * @param key 键
+     * @param index 索引
+     * @param value 值
+     * @return
+     */
+    public boolean lUpdateIndex(String key, long index, Object value) {
+        try {
+            redisTemplate.opsForList().set(key, index, value);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * 移除N个值为value
+     * @param key 键
+     * @param count 移除多少个
+     * @param value 值
+     * @return 移除的个数
+     */
+    public long lRemove(String key, long count, Object value) {
+        try {
+            Long remove = redisTemplate.opsForList().remove(key, count, value);
+            return remove;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+}
+
+```
+
+**测试使用：**
+
+```java
+@Test
+void test02(){
+
+    System.out.println(redisUtil.set("name", "张恒"));
+
+    System.out.println(redisUtil.get("name"));
+
+}
+```
+
+# 11、Redis.cong详解
+
+## 单位
+
+**配置文件units单位对大小写不敏感**
+
+![image-20200506161552834](http://image.beloved.ink/Typora/image-20200506161552834.png)
+
+## 包含
+
+**可以引入别的配置文件**
+
+![image-20200506161641286](http://image.beloved.ink/Typora/image-20200506161641286.png)
+
+## 网络
+
+```bash
+bind 127.0.0.1			# 绑定的ip 目前只有本机可以使用，如果需要远程连接，改为*或者指定ip
+protected-mode yes		# 是否受保护   远程连接需要改为no
+port 6379				# 端口配置
+```
+
+## 通用配置
+
+```bash
+daemonize yes			# 以守护进程运行 默认是no 需要改为yes
+pidfile /var/run/redis_6379.pid   # 如果为yes以后台运行，需要指定pid文件
+
+# 日志
+# Specify the server verbosity level.
+# This can be one of:
+# debug (a lot of information, useful for development/testing)
+# verbose (many rarely useful info, but not a mess like the debug level)
+# notice (moderately verbose, what you want in production probably)  生产环境
+# warning (only very important / critical messages are logged)
+loglevel notice
+
+logfile ""				# 生成的日志文件位置名
+
+databases 16			# 数据库的数量  默认16个
+
+always-show-logo yes	# 是否显示logo
+```
+
+## 快照
+
+**持久化，在规定的时间内，执行了多少次操作，则会持久化到文件`.rdb`、`.aof`**
+
+**Redis是内存数据库，如果没有持久化，那么数据断电即失**
+
+```bash
+# 如果900秒内，至少有1个key进行了修改，进行持久化操作
+save 900 1
+save 300 10
+save 60 10000
+
+stop-writes-on-bgsave-error yes     	# 持久化出错，是否继续进行操作
+
+rdbcompression yes						# 是否压缩rdb文件，需要消耗一些cpu资源
+
+rdbchecksum yes							# 保存rdb文件的时候，进行错误校验
+
+dir ./									# rdb文件的保存目录
+```
+
+## 安全
+
+**设置密码：**
+
+- 通过配置文件修改修改之后需要重启
+
+  ![image-20200506163650380](http://image.beloved.ink/Typora/image-20200506163650380.png)
+
+- 通过命令修改
+
+  ```bash
+  127.0.0.1:6379> config get requirepass			# 查询密码
+  1) "requirepass"
+  2) ""
+  127.0.0.1:6379> config set requirepass 123456	# 设置密码
+  OK
+  127.0.0.1:6379> auth 123456						# 权限认证 否则所以的指令没有权限
+  OK
+  ```
+
+## 限制
+
+```bash
+maxclients 10000		# 设置能连接redis最大客户端的数量
+maxmemory <bytes>		# 设置redis的最大内存容量
+maxmemory-policy noeviction		# 内存到达上限的处理策略
+    1、volatile-lru：只对设置了过期时间的key进行LRU（默认值） 
+    2、allkeys-lru ： 删除lru算法的key   
+    3、volatile-random：随机删除即将过期key   
+    4、allkeys-random：随机删除   
+    5、volatile-ttl ： 删除即将过期的   
+    6、noeviction ： 永不过期，返回错误
+```
+
+## aof
+
+```bash
+appendonly no	# 默认是不开启aof，默认使用rdb方式持久化
+appendfilename "appendonly.aof"	# 持久化文件名
+
+# appendfsync always	 # 每次修改都会同步
+appendfsync everysec     # 每秒执行一次sync，可能会丢失最后一秒的数据
+# appendfsync no		 # 不执行sync，这时操作系统自己同步数据
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
