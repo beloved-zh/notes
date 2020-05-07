@@ -121,6 +121,10 @@ Github：https://github.com/antirez/redis
 
 - 进入src目录,将常用命令移动到`bin`目录下
 
+  ```bash
+  mv mkreleasehdr.sh redis-benchmark redis-check-aof redis-check-rdb redis-cli redis-server redis-sentinel redis-trib.rb /usr/local/redis/bin/
+  ```
+
   ![image-20200504140605029](http://image.beloved.ink/Typora/image-20200504140605029.png)
 
 - 修改配置文件
@@ -2591,7 +2595,7 @@ Pub/Sub从字面上理解就是发布(Publish)与订阅(Suscribe),在Redis中,�
 
 # 14、主从复制
 
-**概念**
+## **概念**
 
 主从复制,是指将一台 Redis服务器的数据,复制到其他的 Redis服务器。前者称为主节点( master/ leader),后者称为从节点( slave/follower);==数据的复制是单向的,只能由主节点到从节点。== Master以写为主,Save以读为主。
 
@@ -2611,5 +2615,314 @@ Pub/Sub从字面上理解就是发布(Publish)与订阅(Suscribe),在Redis中,�
 - 从结构上,单个 Redis服务器会发生单点故障,并且一台服务器需要处理所有的请求负载,压力较大
 - 从容量上，单个Redis服务器内存容量有限，就算一台Redis服务器内存容量为256G，也不能将所有内存用作Redis存储内存，一般来说，==单台Redis最大使用内存不超过20G==
 
-**环境配置**
+## **环境配置**
 
+复制3个配置文件，修改对应的配置信息
+
+- 端口
+
+- pid名
+
+- log文件名
+
+- dump.rdb 文件名
+
+  ```bash
+  port 6380
+  pidfile /var/run/redis_6380.pid
+  logfile "6380.log"
+  dbfilename dump6380.rdb	
+  ```
+
+修改之后启动3个服务
+
+![image-20200507093732223](http://image.beloved.ink/Typora/image-20200507093732223.png)
+
+**主从复制：**
+
+只需要配置从库，不需要配置主库
+
+```bash
+127.0.0.1:6379> info replication		# 查看当前库的信息
+# Replication
+role:master								# 角色	master
+connected_slaves:0						# 从机的数量
+master_replid:511cfb933738c2454f7b467ecd3c5a74b9d9b2d0
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+master_repl_meaningful_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+127.0.0.1:6379> 
+```
+
+**==默认情况下，每台Redis服务器都是主节点。一般情况下只需要配置从机==**
+
+测试：一主（9379）二从（6380、6381）
+
+`slaveof host port`
+
+```bash
+#####################################################################################
+# 从机
+127.0.0.1:6380> slaveof 127.0.0.1 6379     # slaveof host port  找谁做主机
+OK
+127.0.0.1:6380> info replication
+# Replication
+role:slave									# 当前角色   slave 从机
+master_host:127.0.0.1						# 主机的地址
+master_port:6379							# 主机的端口
+master_link_status:up
+master_last_io_seconds_ago:9
+master_sync_in_progress:0
+slave_repl_offset:14
+slave_priority:100
+slave_read_only:1
+connected_slaves:0
+master_replid:df30e103cd21885c12cf052412c9dfa961da13d1
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:14
+master_repl_meaningful_offset:0
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:14
+#####################################################################################
+# 在主机中查看
+127.0.0.1:6379> info replication
+# Replication
+role:master
+connected_slaves:2												# 从机的数量
+slave0:ip=127.0.0.1,port=6380,state=online,offset=84,lag=0		# 从机的信息
+slave1:ip=127.0.0.1,port=6381,state=online,offset=84,lag=0
+master_replid:df30e103cd21885c12cf052412c9dfa961da13d1
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:84
+master_repl_meaningful_offset:0
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:84
+127.0.0.1:6379>
+```
+
+**这里时命令配置，是暂时的，真实的环境应该在配置文件中配置，那是永久配置**
+
+![image-20200507095605705](http://image.beloved.ink/Typora/image-20200507095605705.png)
+
+## 测试
+
+**主机可以写，从机不能写只能读！主机中所有的信息和数据，都会自动被从机保存**
+
+主机写：
+
+![image-20200507100015058](http://image.beloved.ink/Typora/image-20200507100015058.png)
+
+从机只能读，不能写：
+
+![image-20200507100052464](http://image.beloved.ink/Typora/image-20200507100052464.png)
+
+**主机断开连接，从机依旧连接着主机，但是这时候没有写的操作。如果主机回来了，从机依旧可以直接获取到主机写的信息**
+
+**如果使用命令行配置从机，如果从机断开，有重新连接，就会变为主机。但是重新配置为从机，主机的数据可以马上读取到**
+
+## 复制原理
+
+Slave启动成功连接到Master之后发送一个sync命令
+
+Master接到命令，启动后台的存盘进程，同时手机所有接收到的用于修改数据集命令，在后台进程执行完毕之后，==master将传送整个数据文件到slave，并完成一次完全同步==
+
+==全量复制==：slave服务在接收到数据库文件数据后，将其存盘并加载到内存中
+
+==增量复制==：master继续将新的所有收集到的修改命令依次传递给slave，完成同步
+
+但是只要是重新连接master，一次完成同步（全量复制）将自动执行
+
+## 层层连接
+
+上一个M连接下一个S
+
+![image-20200507102133277](http://image.beloved.ink/Typora/image-20200507102133277.png)
+
+![image-20200507102705198](http://image.beloved.ink/Typora/image-20200507102705198.png)
+
+**如果主机断开了连接，这时候可以使用`slaveof no one`是自己变为主机，其他的节点可以手动连接到最新的主机上**
+
+**如果原来的主机重新连接上，那么就需要重新配置**
+
+```bash
+127.0.0.1:6380> slaveof no one			# 是自己成为主机
+OK
+127.0.0.1:6380> info replication
+# Replication
+role:master								# 身份信息
+connected_slaves:1
+slave0:ip=127.0.0.1,port=6381,state=online,offset=1135,lag=1
+master_replid:99ce99c5b5cb707d8b4d74916436a2934b027b19
+master_replid2:df30e103cd21885c12cf052412c9dfa961da13d1
+master_repl_offset:1135
+master_repl_meaningful_offset:1121
+second_repl_offset:3278
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:1135
+```
+
+# 15、哨兵模式
+
+**自动选取主机**
+
+## 概述
+
+主从切换技术的方法是：当主服务器宕机后，需要手动吧一台从服务器切换到主服务器，这就需要人工干预，费时费力，还会造成一段时间内服务器不可用。这不是一种推荐的方式，更多的时候，优先考虑哨兵模式。Redis从2.8开始提供了Sentinel（哨兵模式）架构解决这个问题。
+
+能够监控主机是否故障，如果故障了根据投票数自动将从库变为主库。
+
+哨兵模式是一种特殊的模式，首先Redis提供了哨兵的命令，哨兵是一个独立的进程，作为进程，它会独立运行，其原理是**哨兵通过发送命令，等待Redis服务器响应，从而监控运行的多个Redis实例**
+
+![image-20200507103919622](http://image.beloved.ink/Typora/image-20200507103919622.png)
+
+这里的哨兵两个作用：
+
+- 通过发送命令，让Redis服务器返回监控其运行状态，包括主服务器和从服务器
+- 当哨兵监测到master宕机，会自动将slave切换为master，然后通过**发布订阅模式**通知其他的从服务器，修改配置文件，让它们切换到主机
+
+然而一个哨兵进程对Redis服务器进行监控，可能会出现问题，为此，可以使用多哨兵进行监控，各个哨兵之间还会进行监控，形成多哨兵模式
+
+![image-20200507104556068](http://image.beloved.ink/Typora/image-20200507104556068.png)
+
+假设主服务器宕机，哨兵1先检测到这个结果，系统并不会马上进行failover过程，仅仅是哨兵1主观认为主服务器不可用，这个现象称为**主观下线**，当后面的哨兵也检测到主服务器不可用，并且数量达到一定值时，那么哨兵之间就进行一次投票，投票的结果由一个哨兵发起，进行failover[故障转移]操作，切换成功后，就会通过发布订阅模式，让各个哨兵吧自己监控的从服务器实现切换主机，这个过程称为**客观下线**
+
+## 测试
+
+目前的状态是一主二从
+
+- 在`etc`目录下配置哨兵配置文`sentinel.conf`
+
+  ```bash
+  # sentinel monitor 哨兵名 host port 1
+  sentinel monitor myredis 127.0.0.1 6379 1
+  ```
+
+  后面的1，代表主机挂了，slave投票看让谁接替成为主机，票数最多，就会成为主机
+
+- 启动哨兵
+
+  通过启动目录下的`redis-sentinel`启动哨兵模式
+
+  ```bash
+  # 通过配置文件启动
+  [root@Beloved bin]# ./redis-sentinel /usr/local/redis/etc/sentinel.conf 
+  ```
+
+  ![image-20200507111656567](http://image.beloved.ink/Typora/image-20200507111656567.png)
+
+**如果主机宕机了，这时候会自动选取一个从节点切换为主机（投票算法）**
+
+![image-20200507112156284](http://image.beloved.ink/Typora/image-20200507112156284.png)
+
+**哨兵日志**
+
+![image-20200507112608417](http://image.beloved.ink/Typora/image-20200507112608417.png)
+
+**如果原来的主机重新连接，那么将自动归并到新的主机下，成为从机**
+
+![image-20200507112820147](http://image.beloved.ink/Typora/image-20200507112820147.png)
+
+## 优缺点
+
+**优点：**
+
+- 哨兵集群，基于主从复制模式，所有的主从配置优点，它都有
+- 主从可以切换，故障可以转移，系统的可用性就会更好
+- 哨兵模式就是主从模式的升级，手动到自动
+
+**缺点：**
+
+- Redis不好在线扩容，集群容量一旦到达上限，在线扩容十分麻烦
+- 实现哨兵模式的配置十分麻烦
+
+**哨兵模式的全部配置**
+
+在redis的解压目录下有`sentinel.conf`里面有所有的哨兵模式的配置
+
+最主要的是配置哨兵集群的端口和上面的那个
+
+![image-20200507113809930](http://image.beloved.ink/Typora/image-20200507113809930.png)
+
+# 16、Redis缓存穿透和雪崩
+
+Redis缓存的作用，极大的提高了应用程序的性能和效率，特别是数据查询方面。但同时，它也带来了一些问题。最要害的问题，就是数据的一致性问题，从严格意义上讲，这个问题无解。如果对数据的一致性要求很高，那么就不能使用缓存
+
+另外的一些典型问题就是，缓存穿透，缓存雪崩和缓存击穿
+
+## 缓存穿透
+
+**概念**
+
+缓存穿透的概念：用户想要查询一个数据，发现Redis数据库没有，也就是缓存没有命中，于是向持久层数据库查询。发现也没有，于是查询失败。当用户很多的时候，缓存都没有命中，于是都去请求持久层数据库，这会给持久层数据库造成很大的压力，这时候就相当于出现了缓存穿透
+
+**解决方案**
+
+**布隆过滤器**
+
+布隆过滤器是一种数据结构，对所有可能查询的参数以hash形式存储，在控制层先进行校验，不符合则丢弃，从而避免了对底层存储系统的查询压力
+
+![image-20200507120507213](http://image.beloved.ink/Typora/image-20200507120507213.png)
+
+**缓存空对象**
+
+当存储层不命中后，即使返回的是空对象也将其缓存起来，同时会设置一个过期时间，之后在访问这个数据将会从缓存中获取，保护了后端数据源
+
+![image-20200507120748406](http://image.beloved.ink/Typora/image-20200507120748406.png)
+
+但是这种方法会存在两个问题：
+
+- 如果空值能够被缓存起来，这就意味着缓存需要更多的空间存储更多的键，因为这当中肯会有很多的空值的键
+- 即使对空值设置了过期时间，还是会存在缓存层和存储层的数据会有一段时间窗口的不一致，这对于需要保持一致性的业务会有影响
+
+## 缓存击穿
+
+**概念**
+
+缓存击穿：是指一个key非常热点，在不断的扛着大并发，大并发集中对这一个点进行访问，当这个key在失效的瞬间，持续的大并发就穿破缓存，直接请求数据库，就像在一个屏障上凿开一个洞
+
+当某个key在过期的瞬间，有大量的请求并发访问，这类数据一般是热点数据，由于缓存过期，会同时访问数据库来查询最新数据，并且回写缓存，会导致数据库瞬间压力过大
+
+**解决方案**
+
+- 设置热点数据永不过期
+
+  从缓存层面来看，没有设置过期时间，所以不会出现热点key过期后产生的问题
+
+- 相互斥锁
+
+  分布式锁：使用分布式锁，保证对于每个key同时只有一个线程去查询后端服务，其他线程没有获得分布式锁的权限，因此只需要等待即可。这种方式将高并发的压力转移到分布式锁，因此对分布式锁的考验很大
+
+## 缓存雪崩
+
+**概念**
+
+产生雪崩的原因之一,比如在写本文的时候,马上就要到双十二零点,很快就会迎来一波抢购,这波商品时间比较集中的放入了缓存,假设缓存一个小时。那么了凌晨一点钟的时候,这批商品的缓存就都过期了。而对这批商品的访问査询,都落到了数据库上,对于数据库而言,就会产生周期性的压力波峰。于是所有的请求都会达到存储层,存储层的调用量会暴增,造成存储层也会挂掉的情况。
+
+![image-20200507122459264](http://image.beloved.ink/Typora/image-20200507122459264.png)
+
+其实集中过期,倒不是非常致命,比较致命的缓存雪崩,是缓存服务器某个节点宕机或断网。因为自然形成的缓存雪崩,一定是在某个时间段集中创建缓存,这个时候,数据库也是可以顶住压力的。无非就是对数据库产生周期性的压力而已。而缓存服务节点的宕机,对数据库服务器造成的压力是不可预知的,很有可能瞬间就把数据库压垮。
+
+**解决方案**
+
+**Redis高可用**
+
+这个思想的含义是,既然 redis有可能挂掉,那我多増设几台 redis,这样一台挂掉之后其他的还可以继续工作,其实就是搭建的集（异地多活）
+
+**限流降级**
+这个解决方案的思想是,在缓存失效后,通过加锁或者队列来控制读数据库写缓存的线程数量。比如对某个key只允许一个线程査询数据和写缓存,其他线程等待。
+
+**数据预热**
+数据加热的含义就是在正式部署之前,我先把可能的数据先预先访问一遍,这样部分可能大量访问的数据就会加载到缓存中。在即将发生大并发访问前手动触发加载缓存不同的key,设置不同的过期时间,让缓存失效的时间点尽量均匀
