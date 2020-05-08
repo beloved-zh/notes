@@ -273,45 +273,45 @@ firewall-cmd --list-all
 
 # 2、JDK安装
 
-1. 进入jdk下载页面：https://www.oracle.com/java/technologies/javase/javase-jdk8-downloads.html
-
-   ![](F:/Typora/image-20200429115857994-1588132791815.png)
-
-2. 在/usr/local中创建Java目录。将下载的压缩包导入
-
-3. 解压到当前目录
-
-   ![image-20200429123437191](F:/Typora/image-20200429123437191-1588134918148.png)
-
-   ![image-20200429123448981](http://image.beloved.ink/Typora/image-20200429123448981-1588134925595.png)
-
-**配置环境变量**
-
-1. 编辑/etc/profile文件
-   `vim /etc/profile`
-
-2. 按`Insert`或者`I`键，切换成编辑模式。
-   找到内容末尾，按图片输入下面一段话。
-
-   ```ba
-   export JAVA_HOME=/usr/local/java/jdk1.8.0_251
-   export CLASSPATH=.:$JAVA_HOME/jre/lib/rt.jar:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
-   export PATH=$PATH:$JAVA_HOME/bin
-   ```
-
-   ![image-20200429132834679](http://image.beloved.ink/Typora/image-20200429132834679.png)
-
-3. 按`Esc`退出编辑模式，输入`:wq`保存并退出
-
-4. 输入`source /etc/profile`使刚才修改过的生效
-
-   ![image-20200429124742227](http://image.beloved.ink/Typora/image-20200429124742227.png)
-
-**验证**
-
-输入`java -version`
-
-![image-20200429134341241](http://image.beloved.ink/Typora/image-20200429134341241.png)
+    1. 进入jdk下载页面：https://www.oracle.com/java/technologies/javase/javase-jdk8-downloads.html
+    
+       ![](http://image.beloved.ink/Typora/image-20200429115857994-1588132791815.png)
+    
+    2. 在/usr/local中创建Java目录。将下载的压缩包导入
+    
+    3. 解压到当前目录
+    
+       ![image-20200429123437191](http://image.beloved.ink/Typora/image-20200429123437191-1588134918148.png)
+    
+       ![image-20200429123448981](http://image.beloved.ink/Typora/image-20200429123448981-1588134925595.png)
+    
+    **配置环境变量**
+    
+    1. 编辑/etc/profile文件
+       `vim /etc/profile`
+    
+    2. 按`Insert`或者`I`键，切换成编辑模式。
+       找到内容末尾，按图片输入下面一段话。
+    
+       ```ba
+       export JAVA_HOME=/usr/local/java/jdk1.8.0_251
+       export CLASSPATH=.:$JAVA_HOME/jre/lib/rt.jar:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+       export PATH=$PATH:$JAVA_HOME/bin
+       ```
+    
+       ![image-20200429132834679](http://image.beloved.ink/Typora/image-20200429132834679.png)
+    
+    3. 按`Esc`退出编辑模式，输入`:wq`保存并退出
+    
+    4. 输入`source /etc/profile`使刚才修改过的生效
+    
+       ![image-20200429124742227](http://image.beloved.ink/Typora/image-20200429124742227.png)
+    
+    **验证**
+    
+    输入`java -version`
+    
+    ![image-20200429134341241](http://image.beloved.ink/Typora/image-20200429134341241.png)
 
 # 3、tomact安装
 
@@ -561,6 +561,8 @@ firewall-cmd --list-all
 ```
 
 # 4、mysql安装
+
+## 4.1、安装
 
 - 下载mysql的源
 
