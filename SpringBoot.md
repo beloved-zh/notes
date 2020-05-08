@@ -683,7 +683,7 @@ Hello Thymeleaf!!!
 @Controller
 public class MyController {
 
-    @RequestMapping("/test")
+        @RequestMapping("/test")
     public String test(){
         return "test";
     }
