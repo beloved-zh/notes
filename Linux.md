@@ -647,7 +647,7 @@ FLUSH  PRIVILEGES;
 
 **注意mysql的默认端口3306的防火墙和安全组要开启**
 
-![image-20200429151209467](F:/Typora/image-20200429151209467.png)
+![image-20200429151209467](http://image.beloved.ink/Typora/image-20200429151209467.png)
 
 # 5、运行jar包
 
