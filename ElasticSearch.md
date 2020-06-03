@@ -430,4 +430,369 @@ ik_max_word最细粒度划分！穷尽词库！字典
 
    ![image-20200601160217197](http://image.beloved.ink/Typora/image-20200601160217197.png)
 
-9. 
+# 集成SpringBoot
+
+官方文档：https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-compatibility.html
+
+创建SpringBoot项目es-api
+
+选择ES依赖
+
+![image-20200603104347388](http://image.beloved.ink/Typora/image-20200603104347388.png)
+
+**问题：一定要保证，导入的依赖和本地安装的ES版本一致**
+
+![image-20200603105127545](http://image.beloved.ink/Typora/image-20200603105127545.png)
+
+**需要自己手动配置ES的版本依赖**
+
+```xml
+<properties>
+    <java.version>1.8</java.version>
+    <!-- 自定义ES版本依赖 与本地版本保持一致 -->
+    <elasticsearch.version>7.7.0</elasticsearch.version>
+</properties>
+```
+
+![image-20200603105524900](http://image.beloved.ink/Typora/image-20200603105524900.png)
+
+> ES配置
+
+```java
+@Configuration
+public class ElasticSearchClientConfig {
+
+    @Bean
+    public RestHighLevelClient restHighLevelClient(){
+        RestHighLevelClient client = new RestHighLevelClient(
+                RestClient.builder(
+                        new HttpHost("127.0.0.1",9200,"http")
+                )
+        );
+        return  client;
+    }
+
+}
+```
+
+> 测试索引的操作
+
+```java
+/**
+ * ES API 测试
+ */
+@SpringBootTest
+class EsApiApplicationTests {
+
+    @Autowired
+    @Qualifier("restHighLevelClient")
+    private RestHighLevelClient client;
+
+    // 创建索引请求
+    @Test
+    void testCreateIndex() throws IOException {
+        // 1.创建索引请求
+        CreateIndexRequest request = new CreateIndexRequest("beloved");
+        // 2.客户端执行请求    请求后获得相应
+        CreateIndexResponse response =
+                client.indices().create(request, RequestOptions.DEFAULT);
+
+        System.out.println(response);
+    }
+
+    // 测试获取索引,判断是否存在返回 true false
+    @Test
+    void testExistIndex() throws IOException {
+        GetIndexRequest request = new GetIndexRequest("beloved2");
+        boolean exists = client.indices().exists(request, RequestOptions.DEFAULT);
+        System.out.println(exists);
+    }
+
+
+    // 删除索引
+    @Test
+    void testDeleteIndex() throws IOException {
+        DeleteIndexRequest request = new DeleteIndexRequest("test");
+        AcknowledgedResponse delete = client.indices().delete(request, RequestOptions.DEFAULT);
+        // 查看删除是否成功
+        System.out.println(delete.isAcknowledged());
+    }
+}
+```
+
+> 测试文档操作
+
+```java
+/**
+ * ES API 测试
+ */
+@SpringBootTest
+class EsApiApplicationTests {
+
+    @Autowired
+    @Qualifier("restHighLevelClient")
+    private RestHighLevelClient client;
+
+    // 测试添加文档
+    @Test
+    void testAddDocument() throws IOException {
+        // 创建对象
+        User user = new User("张三", 20);
+
+        // 创建请求                               索引名
+        IndexRequest request = new IndexRequest("beloved");
+
+        // 规则 put /beloved/_doc/1
+        request.id("1");
+
+        // 设置过期时间规则和过期时间为1s
+        request.timeout(TimeValue.timeValueSeconds(1));
+        request.timeout("1s");
+
+        // 将数据放入请求
+        request.source(JSON.toJSONString(user), XContentType.JSON);
+
+        // 客户端发送请求,获取相应结果
+        IndexResponse response = client.index(request, RequestOptions.DEFAULT);
+
+        System.out.println(response.toString());  // 返回具体信息
+        System.out.println(response.status());    // 返回状态 CREATED/UPDATE
+    }
+
+    // 获取文档 判断是否存在
+    @Test
+    void testIsExists() throws IOException {
+        GetRequest request = new GetRequest("beloved", "1");
+
+        // 不获取返回的_source上下文
+        request.fetchSourceContext(new FetchSourceContext(false));
+
+        boolean exists = client.exists(request, RequestOptions.DEFAULT);
+        System.out.println(exists);
+    }
+
+    // 获取文档详细信息
+    @Test
+    void testGetDocument() throws IOException {
+        GetRequest request = new GetRequest("beloved", "1");
+
+        GetResponse response = client.get(request, RequestOptions.DEFAULT);
+
+        // 获取完整信息
+        System.out.println(response);
+        // 获取文档内容
+        System.out.println(response.getSourceAsString());
+    }
+
+    // 更新文档信息
+    @Test
+    void testUpdateDocument() throws IOException {
+        UpdateRequest request = new UpdateRequest("beloved", "1");
+        request.timeout("1s");
+
+        User user = new User("张恒", 25);
+
+        request.doc(JSON.toJSONString(user),XContentType.JSON);
+
+        UpdateResponse response = client.update(request, RequestOptions.DEFAULT);
+
+        System.out.println(response);
+        System.out.println(response.status());
+    }
+
+
+    // 删除文档
+    @Test
+    void testDeleteDocument() throws IOException {
+        DeleteRequest request = new DeleteRequest("beloved", "1");
+        request.timeout("1s");
+
+        DeleteResponse response = client.delete(request, RequestOptions.DEFAULT);
+
+        System.out.println(response);
+        System.out.println(response.status());
+    }
+
+
+    // 批量操作
+    @Test
+    void testBulkRequest() throws IOException {
+        BulkRequest bulkRequest = new BulkRequest();
+        bulkRequest.timeout("10s");
+
+        ArrayList<User> userList = new ArrayList<>();
+        for (int i = 1;i <= 10; i++){
+            userList.add(new User("张恒"+i, i));
+        }
+
+        // 批处理请求  BulkRequest
+        for(int i = 0; i < userList.size(); i++){
+            // 批量更新和删除，这在里修改即可
+            bulkRequest.add(
+                    new IndexRequest("beloved")
+                    .id(""+(i+1))      // id可以省略，会生成一个随机id
+                    .source(JSON.toJSONString(userList.get(i)),XContentType.JSON)
+            );
+        }
+
+        BulkResponse response = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+
+        // 是否失败 false成功  true失败
+        System.out.println(response.hasFailures());
+    }
+
+
+    // 查询
+    @Test
+    void testSearch() throws IOException {
+        SearchRequest request = new SearchRequest("beloved");
+
+        // 构建搜索条件
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+
+        // 查询条件  使用QueryBuilders工具类实现
+        // QueryBuilders.termQuery()    精确
+        // QueryBuilders.matchAllQuery()    匹配所有
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery("name", "张恒");
+        // MatchAllQueryBuilder matchAllQueryBuilder = QueryBuilders.matchAllQuery();
+        sourceBuilder.query(termQueryBuilder);
+        // 分页
+        // sourceBuilder.from();
+        // sourceBuilder.size();
+        sourceBuilder.timeout(new TimeValue(60, TimeUnit.SECONDS));
+
+        request.source(sourceBuilder);
+
+        SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+        System.out.println(response);
+        System.out.println(JSON.toJSONString(response.getHits()));
+
+        System.out.println("==============================");
+        for (SearchHit documentFields : response.getHits().getHits()) {
+            System.out.println(documentFields.getSourceAsMap());
+        }
+
+    }
+ 
+}
+```
+
+# 实战
+
+**模拟京东搜索。使用jsoup解析网页。爬取数据存入ES中，进行搜索**
+
+![image-20200603192953102](http://image.beloved.ink/Typora/image-20200603192953102.png)
+
+> 导入依赖
+
+```xml
+<properties>
+    <java.version>1.8</java.version>
+    <!-- 自定义ES版本依赖 与本地版本保持一致 -->
+    <elasticsearch.version>7.7.0</elasticsearch.version>
+</properties>
+
+<dependencies>
+    <!-- 解析网页 -->
+    <dependency>
+        <groupId>org.jsoup</groupId>
+        <artifactId>jsoup</artifactId>
+        <version>1.10.2</version>
+    </dependency>
+
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>1.2.60</version>
+    </dependency>
+
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+        <exclusions>
+            <exclusion>
+                <groupId>org.junit.vintage</groupId>
+                <artifactId>junit-vintage-engine</artifactId>
+            </exclusion>
+        </exclusions>
+    </dependency>
+</dependencies>
+```
+
+> 使用Jsoup网页分析，爬取数据
+
+```java
+package com.zh.utils;
+
+import com.zh.pojo.Content;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.ArrayList;
+
+@Component
+public class HtmlParseUtil {
+
+//    public static void main(String[] args) throws IOException {
+//
+//        new HtmlParseUtil().parseJD("vue").forEach(System.out::println);
+//
+//    }
+
+    public ArrayList<Content> parseJD(String keywords) throws IOException {
+        // 获取请求   https://search.jd.com/Search?keyword=java
+        String url = "https://search.jd.com/Search?keyword="+keywords;
+
+        // 解析网页   返回的Document就是JavaScript的Document对象
+        Document document = Jsoup.parse(new URL(url), 30000);
+
+        // 所有在js中可以使用的方法，这里都可以使用
+        Element element = document.getElementById("J_goodsList");
+
+        // 获取所有的li标签
+        Elements elements = element.getElementsByTag("li");
+
+        ArrayList<Content> list = new ArrayList<>();
+
+        // 获取元素的内容 el 是每一个li标签
+        for (Element el : elements) {
+            String img = el.getElementsByTag("img").eq(0).attr("src");
+            String price = el.getElementsByClass("p-price").eq(0).text();
+            String title = el.getElementsByClass("p-name").eq(0).text();
+
+            Content content = new Content(title, img, price);
+
+            list.add(content);
+        }
+
+        return list;
+    }
+
+}
+```
+
+**详细业务代码见：https://github.com/beloved-zh/ElasticSearch**
