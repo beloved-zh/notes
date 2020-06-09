@@ -550,10 +550,10 @@ password=123456
 扫描实体类的包，它的默认别名就为这个类的类名，首字母小写
 
 ```xml
-<!--扫描包-->
-<typeAliases>
-    <package name="com.zh.pojo"/>
-</typeAliases>
+    <!--扫描包-->
+    <typeAliases>
+        <package name="com.zh.pojo"/>
+    </typeAliases>
 ```
 
 使用环境
