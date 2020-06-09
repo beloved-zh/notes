@@ -110,8 +110,8 @@ MyBatis-Plus是一个 MyBatis的增强工具，在 MyBatis 的基础上只做增
 8. 在主启动上添加注解，扫描mapper包
 
    ```java
-   //扫描mapper
-   @MapperScan("com.zh.mapper")
+       //扫描mapper
+       @MapperScan("com.zh.mapper")
    @SpringBootApplication
    public class Mybatisplus01HelloworldApplication {
    
