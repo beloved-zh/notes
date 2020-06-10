@@ -627,6 +627,29 @@ public final class CsrfFilter extends OncePerRequestFilter {
 
 **注意：开启csrf防护，退出登录必须是post请求，携带token，不能使用get请求**
 
+## 4.4、显示当前认证用户名 
+
+- 前端获取
+
+  ```html
+  <span class="hidden-xs">
+  	<security:authentication property="principal.username" />
+  </span>
+  或者
+  <span class="hidden-xs">
+  	<security:authentication property="name" />
+  </span>
+  ```
+
+- 后端获取
+
+  ```java
+  // 方式一
+  SecurityContextHolder.getContext().getAuthentication().getName();
+  // 方式二
+  String username = ((SysUser)SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUsername();
+  ```
+
 # 5、SpringSecurity使用数据库数据完成认证
 
 ## 5.1 认证流程分析
@@ -1159,3 +1182,431 @@ public class MyTest {
 ```
 
 ![image-20200609183325447](http://image.beloved.ink/Typora/image-20200609183325447.png)
+
+# 6、设置用户状态
+
+## 6.1、源码分析
+
+用户认证业务里，我们封装User对象时，选择了三个构造参数的构造方法，其实还有另一个构造方法：
+
+```java
+public User(String username, String password, boolean enabled,
+      boolean accountNonExpired, boolean credentialsNonExpired,
+      boolean accountNonLocked, Collection<? extends GrantedAuthority> authorities) {
+
+   if (((username == null) || "".equals(username)) || (password == null)) {
+      throw new IllegalArgumentException(
+            "Cannot pass null or empty values to constructor");
+   }
+
+   this.username = username;
+   this.password = password;
+   this.enabled = enabled;
+   this.accountNonExpired = accountNonExpired;
+   this.credentialsNonExpired = credentialsNonExpired;
+   this.accountNonLocked = accountNonLocked;
+   this.authorities = Collections.unmodifiableSet(sortAuthorities(authorities));
+}
+```
+
+可以看到，这个构造方法里多了四个布尔类型的构造参数，其实我们使用的三个构造参数的构造方法里这四个布尔 值默认都被赋值为了true，那么这四个布尔值到底是何意思呢？ 
+
+- boolean enabled 是否可用 
+- boolean accountNonExpired 账户是否失效 
+- boolean credentialsNonExpired 秘密是否失效 
+- boolean accountNonLocked 账户是否锁定
+
+## 6.2、改造loadUserByUsername
+
+是否可用使用数据库字段，其余默认true
+
+```java
+/**
+ *
+ * @param username 用户在浏览器输入的用户名
+ * @return UserDetails 是SpringSecurity自己的用户对象
+ * @throws UsernameNotFoundException
+ */
+@Override
+public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    try {
+        // 根据用户名查询
+        SysUser sysUser = userDao.findByName(username);
+
+        if (sysUser == null){
+            return null;
+        }
+
+        List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>();
+        List<SysRole> roles = sysUser.getRoles();
+        for (SysRole role : roles) {
+            authorities.add(new SimpleGrantedAuthority(role.getRoleName()));
+        }
+
+        UserDetails userDetails = new User(
+                sysUser.getUsername(),
+                sysUser.getPassword(),
+                sysUser.getStatus() == 1,
+                true,
+                true,
+                true,
+                authorities);
+
+        return userDetails;
+    }catch (Exception e){
+        e.printStackTrace();
+
+        //认证失败
+        return null;
+    }
+}
+```
+
+![image-20200610115324993](http://image.beloved.ink/Typora/image-20200610115324993.png)
+
+测试user登录失败
+
+# 7、remember me
+
+## 7.1、 记住我功能原理分析
+
+找到AbstractRememberMeServices对象的loginSuccess方法：
+
+```java
+public abstract class AbstractRememberMeServices implements RememberMeServices,InitializingBean, LogoutHandler {
+    public final void loginSuccess(HttpServletRequest request, HttpServletResponse response,Authentication successfulAuthentication) {
+        // 判断是否勾选记住我
+        // 注意：这里this.parameter点进去是上面的private String parameter = "remember-me";
+        if (!this.rememberMeRequested(request, this.parameter)) {
+        	this.logger.debug("Remember-me login not requested.");
+        } else {
+            //若勾选就调用onLoginSuccess方法
+            this.onLoginSuccess(request, response, successfulAuthentication);
+        }
+    }
+}
+```
+
+再点进去上面if判断中的rememberMeRequested方法，还在当前类中：
+
+```java
+protected boolean rememberMeRequested(HttpServletRequest request, String parameter) {
+    if (this.alwaysRemember) {
+    	return true;
+    } else {
+        // 从上面的字parameter的值为"remember-me"
+        // 也就是说，此功能提交的属性名必须为"remember-me"
+        String paramValue = request.getParameter(parameter);
+        // 这里我们看到属性值可以为：true，on，yes，1。
+        if (paramValue != null && (paramValue.equalsIgnoreCase("true") ||
+            paramValue.equalsIgnoreCase("on") || paramValue.equalsIgnoreCase("yes") ||
+            paramValue.equals("1"))) {
+            //满足上面条件才能返回true
+            return true;
+        } else {
+            if (this.logger.isDebugEnabled()) {
+                this.logger.debug("Did not send remember-me cookie (principal did not set parameter '" + parameter + "')");
+            }
+            return false;
+        }
+    }
+}
+```
+
+如果上面方法返回true，就表示页面勾选了记住我选项了。 
+
+继续顺着调用的方法找到PersistentTokenBasedRememberMeServices的onLoginSuccess方法：
+
+```java
+public class PersistentTokenBasedRememberMeServices extends AbstractRememberMeServices {
+    protected void onLoginSuccess(HttpServletRequest request, HttpServletResponse response,Authentication successfulAuthentication) {
+        // 获取用户名
+        String username = successfulAuthentication.getName();
+        this.logger.debug("Creating new persistent login for user " + username);
+        //创建记住我的token
+        PersistentRememberMeToken persistentToken = new PersistentRememberMeToken(username,this.generateSeriesData(), this.generateTokenData(), new Date());
+        try {
+            //将token持久化到数据库
+            this.tokenRepository.createNewToken(persistentToken);
+            //将token写入到浏览器的Cookie中
+            this.addCookie(persistentToken, request, response);
+        } catch (Exception var7) {
+        	this.logger.error("Failed to save persistent token ", var7);
+        }
+    }
+}
+```
+
+## 7.2、记住我功能页面代码
+
+**注意name和value属性的值不要写错哦！**
+
+![image-20200610120709375](http://image.beloved.ink/Typora/image-20200610120709375.png)
+
+## 7.3、开启remember me过滤器
+
+```xml
+<!--设置可以用spring的el表达式配置Spring Security并自动生成对应配置组件（过滤器）-->
+<security:http auto-config="true" use-expressions="true">
+    <!--省略其余配置-->
+    <!--开启remember me过滤器，设置token存储时间为60秒-->
+    <security:remember-me token-validity-seconds="60"/>
+</security:http>
+```
+
+**说明：RememberMeAuthenticationFilter中功能非常简单，会在打开浏览器时，自动判断是否认证，如果没有则 调用autoLogin进行自动认证。**
+
+## 7.4、remember me安全性分析
+
+记住我功能方便是大家看得见的，但是安全性却令人担忧。因为Cookie毕竟是保存在客户端的，很容易盗取，而且 cookie的值还与用户名、密码这些敏感数据相关，虽然加密了，但是将敏感信息存在客户端，还是不太安全。那么 这就要提醒喜欢使用此功能的，用完网站要及时手动退出登录，清空认证信息。 此外，SpringSecurity还提供了remember me的另一种相对更安全的实现机制 :在客户端的cookie中，仅保存一个 无意义的加密串（与用户名、密码等敏感数据无关），然后在db中保存该加密串-用户信息的对应关系，自动登录 时，用cookie中的加密串，到db中验证，如果通过，自动登录才算通过。
+
+## 7.5、持久化remember me信息
+
+**创建一张表，注意这张表的名称和字段都是固定的，是SpringSecurity提供的，不要修改。**
+
+```mysql
+CREATE TABLE `persistent_logins` (
+    `username` varchar(64) NOT NULL,
+    `series` varchar(64) NOT NULL,
+    `token` varchar(64) NOT NULL,
+    `last_used` timestamp NOT NULL,
+    PRIMARY KEY (`series`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+```
+
+然后将spring-security.xml中 改为：
+
+```xml
+<!--
+    开启remember me过滤器
+    token-validity-seconds="60"：设置token存储时间为60秒
+    data-source-ref="dataSource"：持久化token到数据库。dataSource来自ioc容器
+    remember-me-parameter：记住我前端name名。默认remember-me
+-->
+<security:remember-me token-validity-seconds="60"
+                        data-source-ref="dataSource"
+                        remember-me-parameter="remember-me"/>
+```
+
+测试登录。使用记住我功能。数据库持久化一条信息
+
+![image-20200610122132787](http://image.beloved.ink/Typora/image-20200610122132787.png)
+
+token自动过期持久化的数据会一直在。当手动退出时，该用户所有的持久化token都会删除
+
+# 8、授权管理
+
+## 8.1、准备工作
+
+创建001和002用户
+
+![image-20200610125120211](http://image.beloved.ink/Typora/image-20200610125120211.png)
+
+创建ROLE_PRODUCT和ROLE_ORDER角色
+
+![image-20200610125218434](http://image.beloved.ink/Typora/image-20200610125218434.png)
+
+为001和002用户授权
+
+![image-20200610125333877](http://image.beloved.ink/Typora/image-20200610125333877.png)
+
+![](http://image.beloved.ink/Typora/image-20200610125401015.png)
+
+## 8.2、动态展示菜单
+
+修改菜单页面，对每个菜单通过SpringSecurity标签库指定访问所需角色
+
+```html
+<%-- 只有管理员可以操作系统管理 --%>
+<security:authorize access="hasAnyRole('ROLE_ADMIN')">
+	<li class="treeview"><a href="#"> <i class="fa fa-cogs"></i>
+    	<span>系统管理</span> <span class="pull-right-container"> <i
+                class="fa fa-angle-left pull-right"></i>
+		</span>
+    </a>
+        <ul class="treeview-menu">
+            <li id="system-setting"><a
+                href="${pageContext.request.contextPath}/user/findAll"> <i
+                class="fa fa-circle-o"></i> 用户管理
+            </a></li>
+            <li id="system-setting"><a
+                href="${pageContext.request.contextPath}/role/findAll"> <i
+                class="fa fa-circle-o"></i> 角色管理
+            </a></li>
+            <li id="system-setting"><a
+                href="${pageContext.request.contextPath}/pages/permission-list.jsp">
+                <i class="fa fa-circle-o"></i> 权限管理
+            </a></li>
+        </ul>
+    </li>
+</security:authorize>
+
+<%-- 管理员和普通用户都可以操作基础数据 --%>
+<security:authorize access="hasAnyRole('ROLE_ADMIN','ROLE_USER')">
+    <li class="treeview"><a href="#"> <i class="fa fa-cube"></i>
+        <span>基础数据</span> <span class="pull-right-container"> <i
+            class="fa fa-angle-left pull-right"></i>
+		</span>
+        </a>
+        <ul class="treeview-menu">
+            <!-- 产品模块还需要产品角色，注意这里还需再次指定超级管理员 -->
+            <security:authorize access="hasAnyRole('ROLE_ADMIN','ROLE_PRODUCT')">
+                <li id="system-setting"><a
+                    href="${pageContext.request.contextPath}/product/findAll">
+                    <i class="fa fa-circle-o"></i> 产品管理
+                </a></li>
+            </security:authorize>
+            <!-- 订单模块需要订单角色 -->
+            <security:authorize access="hasAnyRole('ROLE_ADMIN','ROLE_ORDER')">
+                <li id="system-setting"><a
+                    href="${pageContext.request.contextPath}/order/findAll">
+                    <i class="fa fa-circle-o"></i> 订单管理
+                </a></li>
+            </security:authorize>
+        </ul>
+    </li>
+</security:authorize>
+```
+
+启动测试。使用001用户登录
+
+![image-20200610131345969](http://image.beloved.ink/Typora/image-20200610131345969.png)
+
+只可以看见产品模块菜单
+
+但是通过地址栏可以访问订单模块
+
+![image-20200610131513939](http://image.beloved.ink/Typora/image-20200610131513939.png)
+
+**页面动态菜单的展示只是为了用户体验，并未真正控制权限！**
+
+## 8.3、IOC容器结构说明
+
+![image-20200610133649782](http://image.beloved.ink/Typora/image-20200610133649782.png)
+
+**说明：SpringSecurity可以通过注解的方式来控制类或者方法的访问权限。注解需要对应的注解支持，若注解放在 controller类中，对应注解支持应该放在mvc配置文件中，因为controller类是有mvc配置文件扫描并创建的，同 理，注解放在service类中，对应注解支持应该放在spring配置文件中。由于我们现在是模拟业务操作，并没有 service业务代码，所以就把注解放在controller类中了。**
+
+## 8.4、开启授权的注解支持
+
+```xml
+<!--
+    开启权限控制的注解支持
+    实际开发中只使用一种即可
+    secured-annotations="enabled"  ： SpringSecurity内部的权限控制注解开关
+    pre-post-annotations="enabled" ： Spring指定的权限控制的注解开关
+    jsr250-annotations="enabled"   ： 开启java250注解支持
+-->
+<security:global-method-security
+        secured-annotations="enabled"
+        pre-post-annotations="enabled"
+        jsr250-annotations="enabled" />
+```
+
+**因为是测试模拟业务，注解在controller层，所以注解支持要放在mvc配置文件中**
+
+**实际开发为了安全应该在service层，注解支持可以写在SpringSecurity配置文件中**
+
+## 8.5、在注解支持对应类或者方法上添加注解
+
+```java
+@Controller
+@RequestMapping("/order")
+public class OrderController {
+
+    //@Secured({"ROLE_ADMIN","ROLE_ORDER"})  // SpringSecurity内部制定注解
+    //@RolesAllowed({"ROLE_ADMIN","ROLE_ORDER"})  // jsr250注解
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_ORDER')")  //Spring的el表达式注解
+    @RequestMapping("/findAll")
+    public String findAll(){
+        return "order-list";
+    }
+}
+```
+
+**实际开发使用一种即可**
+
+## 8.6、权限不足异常处理
+
+![image-20200610135412272](http://image.beloved.ink/Typora/image-20200610135412272.png)
+
+**自定义异常页面**
+
+### 8.6.1、在spring-security.xml配置文件中处理
+
+```xml
+<!--设置可以用spring的el表达式配置Spring Security并自动生成对应配置组件（过滤器）-->
+<security:http auto-config="true" use-expressions="true">
+    <!--省略其它配置-->
+    <!--403异常处理-->
+    <security:access-denied-handler error-page="/403.jsp"/>
+</security:http>
+```
+
+### 8.6.2、在web.xml中处理
+
+```xml
+<!--处理403异常-->
+<error-page>
+    <error-code>403</error-code>
+    <location>/403.jsp</location>
+</error-page>
+
+<!--处理404异常-->
+<error-page>
+    <error-code>404</error-code>
+    <location>/404.jsp</location>
+</error-page>
+
+<!--处理500异常-->
+<error-page>
+    <error-code>500</error-code>
+    <location>/500.jsp</location>
+</error-page>
+```
+
+### 8.6.3、编写异常处理器
+
+**测试有问题**
+
+```java
+@Component
+public class HandlerControllerException implements HandlerExceptionResolver {
+
+    /**
+     *
+     * @param httpServletRequest
+     * @param httpServletResponse
+     * @param o 出现的异常对象
+     * @param e 出现的异常信息
+     * @return ModelAndView
+     */
+    @Override
+    public ModelAndView resolveException(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Object o, Exception e) {
+        ModelAndView mv = new ModelAndView();
+        //将异常信息放入Request域中，基本不用
+        mv.addObject("errorMsg",e.getMessage());
+        //指定不同的异常跳转的页面
+        if (e instanceof AccessDeniedException){
+            mv.setViewName("redirect:/403.jsp");
+        }else {
+            mv.setViewName("redirect:/500.jsp");
+        }
+        return mv;
+    }
+}
+```
+
+```java
+@ControllerAdvice
+public class HandlerControllerAdvice {
+
+    //只有出现AccessDeniedException异常才调转403.jsp页面
+    @ExceptionHandler(AccessDeniedException.class)
+    public String exceptionAdvice(){
+        return "forward:/403.jsp";
+    }
+
+}
+```
+
+![image-20200610135803638](http://image.beloved.ink/Typora/image-20200610135803638.png)
