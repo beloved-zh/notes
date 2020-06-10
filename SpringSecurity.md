@@ -1610,3 +1610,82 @@ public class HandlerControllerAdvice {
 ```
 
 ![image-20200610135803638](http://image.beloved.ink/Typora/image-20200610135803638.png)
+
+# 9、SpringBoot整合SpringSecurity
+
+## 9.1、创建项目
+
+创建springboot项目
+
+**编写测试接口**
+
+```java
+@Controller
+public class MyController {
+
+    @GetMapping("/")
+    @ResponseBody
+    public String index(){
+        return "test";
+    }
+
+}
+```
+
+**启动测试**
+
+![image-20200610182504899](http://image.beloved.ink/Typora/image-20200610182504899.png)
+
+**导入SpringSecurity**
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+```
+
+**再次启动测试**
+
+![image-20200610182643130](http://image.beloved.ink/Typora/image-20200610182643130.png)
+
+SpringBoot已经为SpringSecurity提供了默认配置，默认所有资源都必须认证通过才能访问。
+
+其实SpringBoot已经提供了默认用户名user，密码在项目启动时随机生成，如图：
+
+![image-20200610182726403](http://image.beloved.ink/Typora/image-20200610182726403.png)
+
+认证通过后可以继续访问处理器资源
+
+## 9.2、加入jsp使用自定义认证页面
+
+### 说明 
+
+SpringBoot官方是不推荐在SpringBoot中使用jsp的，需要导入tomcat插件启动项目，不能再用SpringBoot默认tomcat了。 
+
+### 导入SpringBoot的tomcat启动插件jar包
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-tomcat</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.apache.tomcat.embed</groupId>
+    <artifactId>tomcat-embed-jasper</artifactId>
+</dependency>
+```
+
+### 加入jsp页面等静态资源
+
+在src/main目录下创建webapp目录
+
+![image-20200610183102024](http://image.beloved.ink/Typora/image-20200610183102024.png)
+
+这时webapp目录并不能正常使用，因为只有web工程才有webapp目录，在pom文件中修改项目为web工程
+
+![image-20200610183204358](http://image.beloved.ink/Typora/image-20200610183204358.png)
+
+导入静态资源，**注意WEB-INF就不用了！**
+
+![image-20200610183637596](http://image.beloved.ink/Typora/image-20200610183637596.png)
