@@ -1657,7 +1657,7 @@ SpringBoot已经为SpringSecurity提供了默认配置，默认所有资源都�
 
 认证通过后可以继续访问处理器资源
 
-## 9.2、加入jsp使用自定义认证页面
+## 9.2、导入静态资源
 
 ### 说明 
 
@@ -1689,3 +1689,429 @@ SpringBoot官方是不推荐在SpringBoot中使用jsp的，需要导入tomcat插
 导入静态资源，**注意WEB-INF就不用了！**
 
 ![image-20200610183637596](http://image.beloved.ink/Typora/image-20200610183637596.png)
+
+## 9.3、提供SpringSecurity配置类
+
+```java
+package com.zh.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    //认证用户的来源（内存或数据库）
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.inMemoryAuthentication()
+                .withUser("user")
+                .password("{noop}123456")
+                .roles("USER");
+    }
+
+    //授权
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+
+        //释放静态资源，指定资源拦截规则，指定自定义认证页面，指定退出配置，csrf配置
+        http.authorizeRequests()
+                .antMatchers("/login.jsp", "/failer.jsp", "/css/**", "/img/**", "/plugins/**")
+                .permitAll()
+                .antMatchers("/**").hasAnyRole("USER","ADMIN")
+                .anyRequest()
+                .authenticated()
+                .and()
+                .formLogin()
+                .loginPage("/login.jsp")
+                .loginProcessingUrl("/login")
+                .successForwardUrl("/index.jsp")
+                .failureForwardUrl("/failer.jsp")
+                .permitAll()
+                .and()
+                .logout()
+                .logoutUrl("/logout")
+                .invalidateHttpSession(true)
+                .logoutSuccessUrl("/login.jsp")
+                .permitAll()
+                .and()
+                .csrf()
+                .disable();
+    }
+}
+```
+
+## 9.4、配置视图解析器
+
+```yml
+server:
+  port: 8080
+
+spring:
+  mvc:
+    view:
+      prefix: /pages/
+      suffix: .jsp
+```
+
+## 9.5、使用tomcat插件启动项目
+
+![image-20200611110543764](http://image.beloved.ink/Typora/image-20200611110543764.png)
+
+## 9.6、测试效果
+
+认证页面
+
+![image-20200611110622079](http://image.beloved.ink/Typora/image-20200611110622079.png)
+
+认证成功
+
+![image-20200611110642153](http://image.beloved.ink/Typora/image-20200611110642153.png)
+
+## 9.7、整合数据库
+
+### 9.7.1、导入数据库操作相关jar包
+
+```xml
+<!--mysql驱动-->
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>5.1.47</version>
+</dependency>
+<!--通用mapper-->
+<dependency>
+    <groupId>tk.mybatis</groupId>
+    <artifactId>mapper-spring-boot-starter</artifactId>
+    <version>2.1.5</version>
+</dependency>
+```
+
+### 9.7.2、在配置文件中添加数据库操作相关配置
+
+```yml
+server:
+  port: 8080
+
+spring:
+  mvc:
+    view:
+      prefix: /pages/
+      suffix: .jsp
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/security
+    username: root
+    password: 123456
+mybatis:
+  type-aliases-package: com.zh.pojo
+  configuration:
+    map-underscore-to-camel-case: true  # 开启驼峰命名
+logging:
+  level:
+    com.zh: debug
+```
+
+在启动类上添加扫描mapper接口包注解
+
+```java
+@SpringBootApplication
+@MapperScan("com.zh.mapper")
+public class SpringbootSecurityJspApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringbootSecurityJspApplication.class, args);
+    }
+
+}
+```
+
+### 9.7.3、创建pojo对象
+
+**所有的pojo都集成springsecurity提供的规范，方便使用**
+
+**注意：springsecurity提供的接口属性要标记，不参与json处理**
+
+```java
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class SysRole implements GrantedAuthority {
+
+    private Integer id;
+    private String roleName;
+    private String roleDesc;
+
+    //返回角色名
+    @JsonIgnore //不参与json字符串转换
+    @Override
+    public String getAuthority() {
+        return roleName;
+    }
+}
+```
+
+```java
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class SysUser implements UserDetails {
+
+    private Integer id;
+    private String username;
+    private String password;
+    private Integer status;
+    private List<SysRole> roles;
+
+    // 返回角色
+    @JsonIgnore
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return roles;
+    }
+
+    //返回密码
+    @JsonIgnore
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    //返回用户名
+    @JsonIgnore
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    //以下四个属性是判断此用户是否可用
+    //不做测试，全部返回true
+    @JsonIgnore
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @JsonIgnore
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @JsonIgnore
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @JsonIgnore
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+}
+```
+
+### 9.7.4、编写mapper接口
+
+```java
+public interface RoleMapper extends Mapper<SysRole> {
+
+    @Select("SELECT r.id, r.role_name roleName, r.role_desc roleDesc " +
+            "FROM sys_role r, sys_user_role ur " +
+            "WHERE r.id=ur.rid AND ur.uid=#{uid}")
+    public List<SysRole> findByUid(Integer uid);
+
+}
+```
+
+```java
+public interface UserMapper extends Mapper<SysUser> {
+
+    @Select("select * from sys_user where username=#{username}")
+    @Results({
+            @Result(id = true, property = "id", column = "id"),
+            @Result(property = "roles", column = "id", javaType = List.class,
+                    many = @Many(select = "com.zh.mapper.RoleMapper.findByUid"))
+    })
+    public SysUser findByUsername(String username);
+
+}
+```
+
+### 9.7.5、编写service
+
+**集成springsecurity提供的接口规范**
+
+```java
+public interface UserService extends UserDetailsService {
+
+}
+```
+
+```java
+@Service
+@Transactional  // 事务注解
+public class UserServiceImpl implements UserService {
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Override
+    public UserDetails loadUserByUsername(String s) throws UsernameNotFoundException {
+        return userMapper.findByUsername(s);
+    }
+}
+```
+
+### 9.7.6、修改配置类
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private DataSource dataSource;
+
+    // 加密方式
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+
+    /**
+     * 配置TokenRepository
+     * @return
+     */
+    @Bean
+    public PersistentTokenRepository persistentTokenRepository() {
+        JdbcTokenRepositoryImpl jdbcTokenRepository = new JdbcTokenRepositoryImpl();
+        // 配置数据源
+        jdbcTokenRepository.setDataSource(dataSource);
+        // 第一次启动的时候自动建表（可以不用这句话，自己手动建表，源码中有语句的）
+        // jdbcTokenRepository.setCreateTableOnStartup(true);
+        return jdbcTokenRepository;
+    }
+
+    //认证用户的来源（内存或数据库）
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userService).passwordEncoder(passwordEncoder());
+    }
+
+    //授权
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        // springboot配置权限可以忽略角色下划线前面的
+        //释放静态资源，指定资源拦截规则，指定自定义认证页面，指定退出配置，csrf配置
+        http.authorizeRequests()
+                .antMatchers("/login.jsp", "/failer.jsp", "/css/**", "/img/**", "/plugins/**")
+                .permitAll()
+                .antMatchers("/**").hasAnyRole("USER","ADMIN")
+                .anyRequest()
+                .authenticated()
+                .and()
+                .formLogin()
+                .loginPage("/login.jsp")
+                .loginProcessingUrl("/login")
+                .successForwardUrl("/index.jsp")
+                .failureForwardUrl("/failer.jsp")
+                .permitAll()
+                .and()
+                .logout()
+                .logoutUrl("/logout")
+                .invalidateHttpSession(true)
+                .logoutSuccessUrl("/login.jsp")
+                .permitAll()
+                .and()
+                .csrf()
+                .disable();
+        //记住我相关配置
+        http.rememberMe()
+                .tokenRepository(persistentTokenRepository())   // 设置TokenRepository
+                // 配置Cookie过期时间
+                .tokenValiditySeconds(60)
+                .rememberMeParameter("remember-me");
+    }
+}
+
+```
+
+### 9.7.7、启动测试
+
+![image-20200611120259709](http://image.beloved.ink/Typora/image-20200611120259709.png)
+
+## 9.8、动态授权
+
+### 9.8.1、在启动类上添加开启方法级的授权注解
+
+```java
+@SpringBootApplication
+@MapperScan("com.zh.mapper")
+@EnableGlobalMethodSecurity(jsr250Enabled=true)  //开启授权注解
+public class SpringbootSecurityJspApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpringbootSecurityJspApplication.class, args);
+    }
+
+}
+```
+
+点进源码，三种授权选择一个
+
+![image-20200611121107426](http://image.beloved.ink/Typora/image-20200611121107426.png)
+
+### 9.8.2、在处理器类上添加注解
+
+```java
+@Controller
+@RequestMapping("/order")
+public class OrderController {
+
+    //@Secured({"ROLE_ADMIN","ROLE_ORDER"})  // SpringSecurity内部制定注解
+    //@RolesAllowed({"ROLE_ADMIN","ROLE_ORDER"})  // jsr250注解
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_ORDER')")  //Spring的el表达式注解
+    @RequestMapping("/findAll")
+    public String findAll(){
+        return "order-list";
+    }
+}
+```
+
+### 9.8.3、访问测试
+
+![image-20200611122621372](http://image.beloved.ink/Typora/image-20200611122621372.png)
+
+### 9.8.4、指定自定义异常页面
+
+编写异常处理器拦截403异常	
+
+```java
+@ControllerAdvice
+public class HandleControllerException {
+
+    @ExceptionHandler(RuntimeException.class)
+    public String exceptionHandler(RuntimeException e){
+        if(e instanceof AccessDeniedException){
+            return "redirect:/403.jsp";
+        }
+        //其余的异常都到500页面！
+        return "redirect:/500.jsp";
+    }
+}
+```
+
+**启动测试**
+
+![image-20200611122921282](http://image.beloved.ink/Typora/image-20200611122921282.png)
