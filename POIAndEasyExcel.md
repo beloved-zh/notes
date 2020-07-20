@@ -348,3 +348,172 @@ SXSSFWorkbook来至官方解释：实现“BigGridDemo”策略的流式XSSFWork
 为任何时候只有可配置的行部分被保存在内存中
 
 请注意，任然可能会消耗大量内存，这些内存基于正使用的功能，例如合并区域，注释......任然只能存储在内存中，因此如果广泛使用，可能需要大量内存
+
+## POI读
+
+### 简单的读取
+
+#### 03版本
+
+```java
+/**
+ * 03简单的读操作
+ */
+@Test
+public void ExcelRead03() throws IOException {
+
+
+    String PATH = "E:\\ideaProject\\POIAndEasyExcel\\POI学生表.xls";
+
+    //获取文件流
+    FileInputStream inputStream = new FileInputStream(PATH);
+
+    //创建工作簿  使用excel能操作这里都可以操作
+    Workbook workbook = new HSSFWorkbook(inputStream);
+    //根据下标获取工作表  也可以根据名
+    Sheet sheet = workbook.getSheetAt(0);
+    //获取行
+    Row row = sheet.getRow(1);
+    //获取列
+    Cell cell = row.getCell(1);
+    //获取值
+    System.out.println(cell.getStringCellValue());
+    inputStream.close();
+}
+```
+
+#### 07版本
+
+```java
+/**
+ * 07简单的读操作
+ */
+@Test
+public void ExcelRead07() throws IOException {
+
+
+    String PATH = "E:\\ideaProject\\POIAndEasyExcel\\POI学生表07.xlsx";
+
+    //获取文件流
+    FileInputStream inputStream = new FileInputStream(PATH);
+
+    //创建工作簿  使用excel能操作这里都可以操作
+    Workbook workbook = new XSSFWorkbook(inputStream);
+    //根据下标获取工作表  也可以根据名
+    Sheet sheet = workbook.getSheetAt(0);
+    //获取行
+    Row row = sheet.getRow(2);
+    //获取列
+    Cell cell = row.getCell(1);
+    //获取值
+    System.out.println(cell.getStringCellValue());
+    inputStream.close();
+}
+```
+
+**注意获取值得类型。类型不一致会报错**
+
+![image-20200717210616522](http://image.beloved.ink/Typora/image-20200717210616522.png)
+
+### 读取不同的数据类型
+
+```java
+/**
+ * 测试读取不同的类型
+ */
+@Test
+public void CellType() throws IOException {
+    String PATH = "E:\\ideaProject\\POIAndEasyExcel\\明细表.xlsx";
+
+
+    //获取文件流
+    FileInputStream inputStream = new FileInputStream(PATH);
+
+    //创建工作簿
+    Workbook workbook = new XSSFWorkbook(inputStream);
+
+    //获取表
+    Sheet sheet = workbook.getSheetAt(0);
+
+    // 获取标题内容
+    // 获取第一行
+    Row title = sheet.getRow(0);
+    if (title != null){
+        // 获取这一行有多少列
+        int cellCount = title.getPhysicalNumberOfCells();
+        for (int i = 0; i < cellCount; i++) {
+            // 获取列
+            Cell cell = title.getCell(i);
+            if (cell!=null){
+                // 获取类型
+                int cellType = cell.getCellType();
+                // 获取值
+                String cellValue = cell.getStringCellValue();
+                System.out.print(cellValue + " | ");
+            }
+        }
+        System.out.println();
+    }
+
+    // 获取表中的内容
+    // 获取所有行
+    int rowCount = sheet.getPhysicalNumberOfRows();
+    for (int rowNum = 1; rowNum < rowCount; rowNum++) {
+        // 获取行
+        Row row = sheet.getRow(rowNum);
+        if (row!=null){
+            // 获取这一行有多少列
+            int cellCount = title.getPhysicalNumberOfCells();
+            for (int cellNum = 0; cellNum < cellCount; cellNum++) {
+                System.out.print("[" + (rowNum+1) + "-" + (cellNum+1) + "]");
+                // 读取列
+                Cell cell = row.getCell(cellNum);
+                // 匹配列的数据类型
+                if (cell != null){
+                    int cellType = cell.getCellType();
+
+                    switch (cellType){
+                        case XSSFCell.CELL_TYPE_STRING: // 字符串
+                            System.out.print(" 字符串 ");
+                            System.out.println(cell.getStringCellValue());
+                            break;
+                        case XSSFCell.CELL_TYPE_BOOLEAN: // 布尔类型
+                            System.out.print(" 布尔类型 ");
+                            System.out.println(cell.getBooleanCellValue());
+                            break;
+                        case XSSFCell.CELL_TYPE_BLANK: // 空值
+                            System.out.println(" 空值 ");
+                            break;
+                        case XSSFCell.CELL_TYPE_NUMERIC: // 数字（日期、普通数字）
+                            if (HSSFDateUtil.isCellDateFormatted(cell)){  // 日期
+                                Date date = cell.getDateCellValue();
+                                System.out.print(" 日期 ");
+                                System.out.println(new DateTime(date).toString("yyyy-MM-dd HH:mm:ss"));
+                            }else{
+                                // 如果不是日期格式，防止数字过长,设置为字符串 可以读取科学计数法
+                                cell.setCellType(XSSFCell.CELL_TYPE_STRING);
+                                System.out.print(" 数字 ");
+                                System.out.println(cell.getStringCellValue());
+                            }
+                            break;
+                        case XSSFCell.CELL_TYPE_ERROR: // 错误
+                            System.out.println("数据类型错误 ");
+                            break;
+                    }
+                }
+            }
+        }
+    }
+
+    inputStream.close();
+}
+```
+
+## EasyExcel
+
+官方文档具有详细操作说明
+
+官方文档：https://www.yuque.com/easyexcel/doc/easyexcel
+
+代码：https://github.com/beloved-zh/POIAndEasyExcel/tree/master
+
