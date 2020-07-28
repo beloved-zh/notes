@@ -300,3 +300,57 @@ $ git stash
 $ git stash pop
 ```
 
+# 配置ssh
+
+## 查看之前是否配置ssh
+
+打开`git bash`终端运行`cd .ssh`
+
+这里会存在两种情况：
+
+1. 没有提示直接进入文件。为了防止意外，最好删除原来的，重新生成
+
+   ![image-20200728145044017](F:/Typora/image-20200728145044017.png)
+
+2. 提示没有对应的文件夹或者文件。
+
+   1. 生成ssh文件`ssh-keygen -t rsa -C 'your-email'  `
+
+      > **注意**在用户目录下执行此命令
+      >
+      > `your-email`是自己绑定的对应邮箱
+
+      全部为空，按回车
+
+      会在用户目录下`.ssh`文件夹里生成三个文件
+
+      ![image-20200728145730008](http://image.beloved.ink/Typora/image-20200728145730008.png)
+
+## 配置
+
+在`.ssh`文件夹下找到`id_rsa.pub`文件，可以用记事本打开。复制里面的全部内容
+
+打开github或者gitee配置。找到SSH配置菜单
+
+![image-20200728150212166](http://image.beloved.ink/Typora/image-20200728150212166.png)
+
+添加 ssh-key。
+
+![image-20200728150409654](http://image.beloved.ink/Typora/image-20200728150409654.png)
+
+配置完成
+
+## 注意
+
+配置完成之后提交代码可能还需要密码
+
+那是因为仓库是使用`https`绑定的
+
+将仓库换成`ssh`绑定即可
+
+```bash
+git remote remove origin
+git remote add origin git@github.com:Username/Your_Repo_Name.git
+```
+
+![image-20200728150819520](http://image.beloved.ink/Typora/image-20200728150819520.png)
