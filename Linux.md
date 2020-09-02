@@ -325,16 +325,16 @@ firewall-cmd --list-all
 
    ![image-20200429122323751](http://image.beloved.ink/Typora/image-20200429122323751.png)
 
-4. 启动/停止
+## 启动/停止
 
-   在`bin`目录下
+在`bin`目录下
 
-   ```bash
-   ./startup.sh   # 启动
-   ./shutdown.sh  # 停止
-   ```
+```bash
+./startup.sh   # 启动
+./shutdown.sh  # 停止
+```
 
-   ![image-20200429135134543](http://image.beloved.ink/Typora/image-20200429135134543.png)
+![image-20200429135134543](http://image.beloved.ink/Typora/image-20200429135134543.png)
 
 5. **注意**：需要开启8080防火墙端口，配置阿里云安全组开启8080
 
@@ -670,3 +670,12 @@ FLUSH  PRIVILEGES;
 三、nohup java -jar XXX.jar >temp.out &
 
 \>temp.out的意思是将日志输出重定向到temp.out文件，使用ctrl+c中断或者关闭窗口都不会中断程序的执行
+
+# 6、关闭jar
+
+```bash
+#列出后台进程
+ps -ef | grep java
+#杀死进程，-9：无条件终止进程，xxxx：要关闭进程的pid
+kill -9 xxxx
+```
