@@ -271,6 +271,8 @@ firewall-cmd --state
 firewall-cmd --list-all
 ```
 
+https://www.linuxidc.com/Linux/2019-06/159104.htm
+
 # 2、JDK安装
 
 ### jdk下载
@@ -300,8 +302,9 @@ https://www.oracle.com/java/technologies/javase/javase-jdk8-downloads.html
    export PATH=$JAVA_HOME/bin:$PATH
    ```
    
+
 ![image-20200904225716184](image-20200904225716184.png)
-   
+
 3. 按`Esc`退出编辑模式，输入`:wq`保存并退出
 
 4. 输入`source /etc/profile`使刚才修改过的生效
