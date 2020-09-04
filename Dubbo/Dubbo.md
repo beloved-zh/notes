@@ -234,3 +234,27 @@ Zookeeper官网：https://zookeeper.apache.org/index.html
     ```
 
   **具体防火墙命令可参考：**https://www.linuxidc.com/Linux/2019-06/159104.htm
+
+# 6、Dubbo支持的协议
+
+## Dubbo
+
+- Dubbo官方推荐的协议.
+
+- 本质:使用NIO和线程池进行处理.
+
+- 缺点:大文件传输时可能出现文件传输失败问题.
+
+## RMI
+
+- JDK提供的协议,远程方法调用协议.
+
+- 缺点:偶尔连接失败.
+
+- 优点:JDK原生,不需要进行额外配置(导入jar)
+
+## Hession
+
+- 优点:基于http协议,http请求支持.
+
+- 缺点:需要额外导入jar,并在短连接时性能低
