@@ -103,13 +103,134 @@
 - Simple
   - 适用于测试环境.不支持集群.
 
-# 5、Zookeeper讲解
+# 5、Zookeeper
 
 - Zookeeper 分布式协调组件.
   - 本质一个软件.
-
 - Zookeeper常用功能
   - 发布订阅功能.把zookeeper当作注册中心原因.
   - 分布式/集群管理功能.
+- 使用java语言编写的
 
-- 使用java语言编写的.
+## 5.1、下载安装
+
+Zookeeper官网：https://zookeeper.apache.org/index.html
+
+3.6.1下载地址：https://www.apache.org/dyn/closer.lua/zookeeper/zookeeper-3.6.1/apache-zookeeper-3.6.1-bin.tar.gz
+
+**Zookeeper安装前提配置好了JDK**
+
+- 上传zookeeper 安装包到linux中/usr/local/temp 中(目录随意,对安装无影响)
+
+- 解压zookeeper压缩包
+
+  ```bash
+  tar zxvf apache-zookeeper-3.6.1-bin.tar.gz
+  ```
+
+- 移动zookeeper解压后的文件夹到/usr/local下并起名为zookpper(复制后名称任意,对安装无影响)
+
+  ```bash
+  mv apache-zookeeper-3.6.1-bin ../zookeeper
+  ```
+
+-  进入到zookeeper文件夹中
+
+  ```bash
+  [root@localhost local]# pwd
+  /usr/local
+  [root@localhost local]# cd zookeeper/
+  ```
+
+- 在zookeeper中新建data文件夹,做为zookeeper数据存储文件夹
+
+  ```bash
+  mkdir data
+  ```
+
+- 进入到conf文件夹
+
+  ```bash
+  cd conf
+  ```
+
+- 复制zoo_sample.cfg,并给新起名的zoo.cfg
+
+  ```bash
+  ls
+  configuration.xsl  log4j.properties  zoo_sample.cfg
+  cp zoo_sample.cfg zoo.cfg  # 复制
+  ls
+  configuration.xsl  log4j.properties  zoo.cfg  zoo_sample.cfg
+  ```
+
+- 修改zoo.cfg中dataDir属性值为新建data文件夹的路径
+
+  ```bash
+  vim zoo.cfg
+  ```
+
+  修改后的效果   **2181为Zookeeper的端口号**
+
+  ![image-20200904232619987](image-20200904232619987.png)
+
+- 进入到zookeeper/bin文件夹,使用zkServer.sh启动zookeeper
+
+  ```bash
+  [root@localhost /]# cd usr/local/zookeeper/bin/  
+  [root@localhost bin]# ls
+  README.txt    zkCli.cmd  zkEnv.cmd  zkServer.cmd            zkServer.sh            zkSnapShotToolkit.sh  zkTxnLogToolkit.sh
+  zkCleanup.sh  zkCli.sh   zkEnv.sh   zkServer-initialize.sh  zkSnapShotToolkit.cmd  zkTxnLogToolkit.cmd
+  [root@localhost bin]# ./zkServer.sh 执行命令 查看参数
+  ZooKeeper JMX enabled by default
+  Using config: /usr/local/zookeeper/bin/../conf/zoo.cfg
+  Usage: ./zkServer.sh [--config <conf-dir>] {start|start-foreground|stop|version|restart|status|print-cmd}
+  [root@localhost bin]# ./zkServer.sh start  # 启动
+  ZooKeeper JMX enabled by default
+  Using config: /usr/local/zookeeper/bin/../conf/zoo.cfg
+  Starting zookeeper ... STARTED
+  ```
+
+  启动效果图
+
+  ![image-20200904233146844](image-20200904233146844.png)
+
+-  查看状态,其中Mode: standalone表示单机版
+
+  ```bash
+  ./zkServer.sh status
+  ```
+
+  ![image-20200904233255846](image-20200904233255846.png)
+
+- 为了外部能访问,需要在防火墙中放行2181端口
+
+  **这里使用默认防火墙firewalle不是iptables**
+
+  - 查看Zookeeper默认端口2181是否开启
+
+    ```bash
+    firewall-cmd --query-port=2181/tcp
+    ```
+
+  - 开启2181端口
+
+    ```bash
+    firewall-cmd --zone=public --add-port=2181/tcp --permanent
+    ```
+
+  - 重启防火墙
+
+    ```bash
+    firewall-cmd --reload
+    ```
+
+  - 再次查询是否开启
+
+  - 查询哪些端口是开启的
+
+    ```bash
+    firewall-cmd --list-port
+    ```
+
+  **具体防火墙命令可参考：**https://www.linuxidc.com/Linux/2019-06/159104.htm
