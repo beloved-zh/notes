@@ -671,7 +671,7 @@ FLUSH  PRIVILEGES;
 
 \>temp.out的意思是将日志输出重定向到temp.out文件，使用ctrl+c中断或者关闭窗口都不会中断程序的执行
 
-# 6、关闭jar
+**关闭jar**
 
 ```bash
 #列出后台进程
@@ -679,3 +679,23 @@ ps -ef | grep java
 #杀死进程，-9：无条件终止进程，xxxx：要关闭进程的pid
 kill -9 xxxx
 ```
+
+# 6、配置纯净镜像
+
+## 6.1、配置ping命令
+
+参考文章
+
+https://blog.csdn.net/weixin_38214171/article/details/85330179
+
+**注意：**
+
+配置的ip地址，不一定是在VMware中看的
+
+## 6.2、配置ifconfig命令
+
+https://www.linuxidc.com/Linux/2018-10/154766.htm
+
+## 6.3、虚拟机无法连接宿主机
+
+https://www.cnblogs.com/hanxiaomeng/p/12468921.html
