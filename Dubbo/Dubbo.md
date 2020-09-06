@@ -317,12 +317,16 @@ RPC框架,不希望Consumer知道具体实现.如果实现类和接口在同一�
           <artifactId>dubbo</artifactId>
           <version>2.6.7</version>
       </dependency>
-      <!-- 访问zookeeper的客户端jar -->
-      <dependency>
-          <groupId>com.101tec</groupId>
-          <artifactId>zkclient</artifactId>
-          <version>0.11</version>
-      </dependency>
+      <!--
+          访问zookeeper的客户端jar
+          dubbo 2.6以前的版本引入zkclient操作zookeeper
+          dubbo 2.6及以后的版本引入curator操作zookeeper
+          -->
+      <!--        <dependency>-->
+      <!--            <groupId>com.101tec</groupId>-->
+      <!--            <artifactId>zkclient</artifactId>-->
+      <!--            <version>0.11</version>-->
+      <!--        </dependency>-->
       <!-- 对zookeeper的底层api的一些封装 -->
       <dependency>
           <groupId>org.apache.curator</groupId>
@@ -330,11 +334,11 @@ RPC框架,不希望Consumer知道具体实现.如果实现类和接口在同一�
           <version>4.0.1</version>
       </dependency>
       <!-- 封装了一些高级特性，如：Cache事件监听、选举、分布式锁、分布式Barrier -->
-      <dependency>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-recipes</artifactId>
-          <version>4.0.1</version>
-      </dependency>
+      <!--        <dependency>-->
+      <!--            <groupId>org.apache.curator</groupId>-->
+      <!--            <artifactId>curator-recipes</artifactId>-->
+      <!--            <version>4.0.1</version>-->
+      <!--        </dependency>-->
       <!--Netty 是一个广泛使用的 Java 网络编程框架-->
       <dependency>
           <groupId>io.netty</groupId>
@@ -600,22 +604,26 @@ tomcat 在conf文件中的server.xml 中修改端口：
         <version>1.0-SNAPSHOT</version>
     </dependency>
     <!--
-    dubbo
-    注意版本：从2.5.4开始 依赖的spring是4.x版本
-            之前的spring版本为2.x,需要手动导入spring高版本在dubbo中剔除低版本
+        dubbo
+        注意版本：从2.5.4开始 依赖的spring是4.x版本
+                之前的spring版本为2.x,需要手动导入spring高版本在dubbo中剔除低版本
 
-    -->
+        -->
     <dependency>
         <groupId>com.alibaba</groupId>
         <artifactId>dubbo</artifactId>
         <version>2.6.7</version>
     </dependency>
-    <!-- 访问zookeeper的客户端jar -->
-    <dependency>
-        <groupId>com.101tec</groupId>
-        <artifactId>zkclient</artifactId>
-        <version>0.11</version>
-    </dependency>
+    <!--
+        访问zookeeper的客户端jar
+        dubbo 2.6以前的版本引入zkclient操作zookeeper
+        dubbo 2.6及以后的版本引入curator操作zookeeper
+        -->
+    <!--        <dependency>-->
+    <!--            <groupId>com.101tec</groupId>-->
+    <!--            <artifactId>zkclient</artifactId>-->
+    <!--            <version>0.11</version>-->
+    <!--        </dependency>-->
     <!-- 对zookeeper的底层api的一些封装 -->
     <dependency>
         <groupId>org.apache.curator</groupId>
@@ -623,11 +631,11 @@ tomcat 在conf文件中的server.xml 中修改端口：
         <version>4.0.1</version>
     </dependency>
     <!-- 封装了一些高级特性，如：Cache事件监听、选举、分布式锁、分布式Barrier -->
-    <dependency>
-        <groupId>org.apache.curator</groupId>
-        <artifactId>curator-recipes</artifactId>
-        <version>4.0.1</version>
-    </dependency>
+    <!--        <dependency>-->
+    <!--            <groupId>org.apache.curator</groupId>-->
+    <!--            <artifactId>curator-recipes</artifactId>-->
+    <!--            <version>4.0.1</version>-->
+    <!--        </dependency>-->
     <!--Netty 是一个广泛使用的 Java 网络编程框架-->
     <dependency>
         <groupId>io.netty</groupId>
@@ -807,11 +815,11 @@ public interface TestService {
     <version>2.7.8</version>
 </dependency>
 <!--zkclient-->
-<dependency>
-    <groupId>com.101tec</groupId>
-    <artifactId>zkclient</artifactId>
-    <version>0.11</version>
-</dependency>
+<!--		<dependency>-->
+<!--			<groupId>com.101tec</groupId>-->
+<!--			<artifactId>zkclient</artifactId>-->
+<!--			<version>0.11</version>-->
+<!--		</dependency>-->
 <!-- 对zookeeper的底层api的一些封装 -->
 <dependency>
     <groupId>org.apache.curator</groupId>
@@ -825,18 +833,18 @@ public interface TestService {
     <version>4.0.1</version>
 </dependency>
 <!--日志会冲突-->
-<dependency>
-    <groupId>org.apache.zookeeper</groupId>
-    <artifactId>zookeeper</artifactId>
-    <version>3.4.12</version>
-    <!--排除slf4j-log4j12-->
-    <exclusions>
-        <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
+<!--		<dependency>-->
+<!--			<groupId>org.apache.zookeeper</groupId>-->
+<!--			<artifactId>zookeeper</artifactId>-->
+<!--			<version>3.4.12</version>-->
+<!--			&lt;!&ndash;排除slf4j-log4j12&ndash;&gt;-->
+<!--			<exclusions>-->
+<!--				<exclusion>-->
+<!--					<groupId>org.slf4j</groupId>-->
+<!--					<artifactId>slf4j-log4j12</artifactId>-->
+<!--				</exclusion>-->
+<!--			</exclusions>-->
+<!--		</dependency>-->
 ```
 
 ### 10.3.2、配置dubbo
@@ -903,11 +911,11 @@ public class TestServiceImpl implements TestService {
     <version>2.7.8</version>
 </dependency>
 <!--zkclient-->
-<dependency>
-    <groupId>com.101tec</groupId>
-    <artifactId>zkclient</artifactId>
-    <version>0.11</version>
-</dependency>
+<!--		<dependency>-->
+<!--			<groupId>com.101tec</groupId>-->
+<!--			<artifactId>zkclient</artifactId>-->
+<!--			<version>0.11</version>-->
+<!--		</dependency>-->
 <!-- 对zookeeper的底层api的一些封装 -->
 <dependency>
     <groupId>org.apache.curator</groupId>
@@ -921,18 +929,18 @@ public class TestServiceImpl implements TestService {
     <version>4.0.1</version>
 </dependency>
 <!--日志会冲突-->
-<dependency>
-    <groupId>org.apache.zookeeper</groupId>
-    <artifactId>zookeeper</artifactId>
-    <version>3.4.12</version>
-    <!--排除slf4j-log4j12-->
-    <exclusions>
-        <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-    </exclusions>
-</dependency>
+<!--		<dependency>-->
+<!--			<groupId>org.apache.zookeeper</groupId>-->
+<!--			<artifactId>zookeeper</artifactId>-->
+<!--			<version>3.4.12</version>-->
+<!--			&lt;!&ndash;排除slf4j-log4j12&ndash;&gt;-->
+<!--			<exclusions>-->
+<!--				<exclusion>-->
+<!--					<groupId>org.slf4j</groupId>-->
+<!--					<artifactId>slf4j-log4j12</artifactId>-->
+<!--				</exclusion>-->
+<!--			</exclusions>-->
+<!--		</dependency>-->
 ```
 
 ### 10.4.2、配置dubbo
