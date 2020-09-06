@@ -44,6 +44,8 @@
 
 **Dubbo:一个分布式、高性能、透明化的RPC服务框架**
 
+官网：http://dubbo.apache.org/zh-cn/
+
 ## 3.1、作用
 
 **提供服务自动注册、自动发现等高效服务治理方案.**
@@ -733,3 +735,247 @@ public class Consumer {
 可以在dubbo-admin中查看服务信息
 
 ![image-20200905234738961](image-20200905234738961.png)
+
+# 10、Springboot
+
+## 10.1、Dubbo-admin.jar
+
+- 地址 ：https://github.com/apache/dubbo-admin/tree/master
+
+- 解压修改 dubbo-admin\src\main\resources \application.properties 指定zookeeper地址
+
+  - 修改zookeeper的地址和端口
+
+  ```properties
+  server.port=7001
+  spring.velocity.cache=false
+  spring.velocity.charset=UTF-8
+  spring.velocity.layout-url=/templates/default.vm
+  spring.messages.fallback-to-system-locale=false
+  spring.messages.basename=i18n/message
+  spring.root.password=root
+  spring.guest.password=guest
+  
+  dubbo.registry.address=zookeeper://127.0.0.1:2181
+  ```
+
+- 在项目目录下打包dubbo-admin
+
+  ```bash
+  mvn clean package -Dmaven.test.skip=true
+  ```
+
+- 将`/dubbo-admin`中打包的jar包运行即可
+
+  **需要开放dubbo-admin端口：默认端口7001**
+
+## 10.2、dubbo-service
+
+测试接口
+
+```java
+package com.zh.service;
+
+/**
+ * @author Beloved
+ * @date 2020/9/6 14:10
+ */
+public interface TestService {
+
+    String test();
+
+}
+```
+
+## 10.3、（服务提供者）provider-service
+
+### 10.3.1、导入依赖
+
+==**注意：zookeeper依赖不能超过3.4.12，不然连接不上**==
+
+```xml
+<!--服务接口-->
+<dependency>
+    <groupId>com.zh</groupId>
+    <artifactId>dubbo-service</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<!-- dubbo-springboot -->
+<dependency>
+    <groupId>org.apache.dubbo</groupId>
+    <artifactId>dubbo-spring-boot-starter</artifactId>
+    <version>2.7.8</version>
+</dependency>
+<!--zkclient-->
+<dependency>
+    <groupId>com.101tec</groupId>
+    <artifactId>zkclient</artifactId>
+    <version>0.11</version>
+</dependency>
+<!-- 对zookeeper的底层api的一些封装 -->
+<dependency>
+    <groupId>org.apache.curator</groupId>
+    <artifactId>curator-framework</artifactId>
+    <version>4.0.1</version>
+</dependency>
+<!-- 封装了一些高级特性，如：Cache事件监听、选举、分布式锁、分布式Barrier -->
+<dependency>
+    <groupId>org.apache.curator</groupId>
+    <artifactId>curator-recipes</artifactId>
+    <version>4.0.1</version>
+</dependency>
+<!--日志会冲突-->
+<dependency>
+    <groupId>org.apache.zookeeper</groupId>
+    <artifactId>zookeeper</artifactId>
+    <version>3.4.12</version>
+    <!--排除slf4j-log4j12-->
+    <exclusions>
+        <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+```
+
+### 10.3.2、配置dubbo
+
+```properties
+server.port=8081
+
+# 服务应用名称
+dubbo.application.name=provider-service
+# 注册中心地址
+dubbo.registry.address=zookeeper://192.168.43.200:2181
+# 需要扫描的包
+dubbo.scan.base-packages=com.zh.service.impl
+```
+
+### 10.3.3、创建接口实现类
+
+**注册服务：**
+
+- apache的dubbo中抛弃了@service注解
+- 使用@DubboService注解注册服务
+- 可以与spring中的@service区分开
+
+```java
+package com.zh.service.impl;
+
+import com.zh.service.TestService;
+import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.stereotype.Service;
+
+/**
+ * @author Beloved
+ * @date 2020/9/6 14:14
+ */
+@DubboService  // 注册服务
+@Service	   // 注入ioc容器
+public class TestServiceImpl implements TestService {
+    @Override
+    public String test() {
+        return "我是一个测试服务";
+    }
+}
+```
+
+### 10.3.4、启动测试
+
+![image-20200906155302478](image-20200906155302478.png)
+
+## 10.4、（服务消费者）consumer-service
+
+### 10.4.1、导入依赖
+
+```xml
+<!--服务接口-->
+<dependency>
+    <groupId>com.zh</groupId>
+    <artifactId>dubbo-service</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+<!-- dubbo-springboot -->
+<dependency>
+    <groupId>org.apache.dubbo</groupId>
+    <artifactId>dubbo-spring-boot-starter</artifactId>
+    <version>2.7.8</version>
+</dependency>
+<!--zkclient-->
+<dependency>
+    <groupId>com.101tec</groupId>
+    <artifactId>zkclient</artifactId>
+    <version>0.11</version>
+</dependency>
+<!-- 对zookeeper的底层api的一些封装 -->
+<dependency>
+    <groupId>org.apache.curator</groupId>
+    <artifactId>curator-framework</artifactId>
+    <version>4.0.1</version>
+</dependency>
+<!-- 封装了一些高级特性，如：Cache事件监听、选举、分布式锁、分布式Barrier -->
+<dependency>
+    <groupId>org.apache.curator</groupId>
+    <artifactId>curator-recipes</artifactId>
+    <version>4.0.1</version>
+</dependency>
+<!--日志会冲突-->
+<dependency>
+    <groupId>org.apache.zookeeper</groupId>
+    <artifactId>zookeeper</artifactId>
+    <version>3.4.12</version>
+    <!--排除slf4j-log4j12-->
+    <exclusions>
+        <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+```
+
+### 10.4.2、配置dubbo
+
+```properties
+server.port=8002
+
+# 服务应用名称
+dubbo.application.name=provider-service
+# 注册中心地址
+dubbo.registry.address=zookeeper://192.168.43.200:2181
+```
+
+### 10.4.3、测试
+
+**使用@DubboReference注解拿到服务**
+
+```java
+package com.zh;
+
+import com.zh.service.TestService;
+import org.apache.dubbo.config.annotation.DubboReference;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ConsumerServiceApplicationTests {
+
+    @DubboReference
+    private TestService testService;
+
+    @Test
+    void contextLoads() {
+
+        String test = testService.test();
+
+        System.out.println(test);
+
+    }
+
+}
+```
+
+![image-20200906155602865](image-20200906155602865.png)
+
+![image-20200906155625100](image-20200906155625100.png)

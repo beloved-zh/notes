@@ -3298,7 +3298,7 @@ dubbo.registry.address=zookeeper://127.0.0.1:2181
 
 **3、在项目目录下**打包dubbo-admin
 
-```
+```bash
 mvn clean package -Dmaven.test.skip=true
 ```
 
