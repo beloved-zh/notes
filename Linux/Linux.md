@@ -703,3 +703,7 @@ https://www.linuxidc.com/Linux/2018-10/154766.htm
 ## 6.3、虚拟机无法连接宿主机
 
 https://www.cnblogs.com/hanxiaomeng/p/12468921.html
+
+## 6.4、重启网卡失败
+
+https://blog.csdn.net/selfsojourner/article/details/72510432
