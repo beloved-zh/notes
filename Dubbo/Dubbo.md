@@ -1,6 +1,4 @@
-# 1、SOA
-
-**SOA：面向服务架构（Service-Oriented Architecture）**
+**SOA**：面向服务架构（Service-Oriented Architecture）**
 
 ## 1.1、SOA定位：
 
@@ -987,3 +985,348 @@ class ConsumerServiceApplicationTests {
 ![image-20200906155602865](image-20200906155602865.png)
 
 ![image-20200906155625100](image-20200906155625100.png)
+
+# 11、Dubbo相关配置
+
+## 11.1、XML配置方式
+
+### 11.1.1、XML配置覆盖关系
+
+以 timeout 为例，下图显示了配置的查找顺序，其它 retries, loadbalance, actives 等类似：
+
+- **精确优先：**方法级优先，接口级次之，全局配置再次之。
+- **消费者优先：**如果级别一样，则消费方优先，提供方次之。
+
+其中，服务提供方配置，通过 URL 经由注册中心传递给消费方。
+
+![dubbo-config-override](dubbo-config-override.jpg)
+
+### 11.1.2、启动时检查
+
+Dubbo 缺省会在启动时检查依赖的服务是否可用，不可用时会抛出异常，阻止 Spring 初始化完成，以便上线时，能及早发现问题，默认 `check="true"`。
+
+可以通过 `check="false"` 关闭检查，比如，测试时，有些服务不关心，或者出现了循环依赖，必须有一方先启动。
+
+另外，如果你的 Spring 容器是懒加载的，或者通过 API 编程延迟引用服务，请关闭 check，否则服务临时不可用时，会抛出异常，拿到 null 引用，如果 `check="false"`，总是会返回引用，当服务恢复时，能自动连上。
+
+**不启动服务提供者直接启动消费端，去除调用服务。直接报错，找不到这个服务**
+
+![image-20200907220237296](image-20200907220237296.png)
+
+![image-20200907215533929](image-20200907215533929.png)
+
+**配置参考：http://dubbo.apache.org/zh-cn/docs/user/demos/preflight-check.html**
+
+在服务消费者方配置
+
+- 配置单个服务
+
+  ```xml
+  <dubbo:reference interface="com.zh.service.DemoService" check="false" />
+  ```
+
+- 统一配置
+
+  ```xml
+  <dubbo:consumer check="false" />
+  ```
+
+#### 11.1.2.1、Zookeeper启动时检查
+
+可以在zookeeper没有启动的时候启动不报错
+
+```xml
+<dubbo:registry check="false" />
+```
+
+### 11.1.3、超时配置
+
+`timeout`配置服务的超时时间
+
+**参考：11.1.1、XML配置覆盖关系**
+
+**默认时间：1000（毫秒）**
+
+以下顺便就是级别顺序
+
+- 消费者方法级别
+
+  ```xml
+  <dubbo:reference interface="com.zh.service.DemoService">
+      <dubbo:method name="方法名" timeout="1000"/>
+  </dubbo:reference>
+  ```
+
+- 提供者方法级别
+
+  ```xml
+  <dubbo:service interface="com.zh.service.DemoService" ref="demoServiceImplNew">
+      <dubbo:method name="方法名" timeout="2000"/>
+  </dubbo:service>
+  ```
+
+- 消费者服务级别
+
+  ```xml
+  <dubbo:reference interface="com.zh.service.DemoService" timeout="3000"/>
+  ```
+
+- 提供者服务级别
+
+  ```xml
+  <dubbo:service interface="com.zh.service.DemoService" ref="demoServiceImplNew" timeout="4000"/>
+  ```
+
+- 消费者统一配置
+
+  ```xml
+  <dubbo:consumer timeout="5000" />
+  ```
+
+- 提供者统一配置
+
+  ```xml
+  <dubbo:provider timeout="6000" />
+  ```
+
+#### 11.1.3.1、超时重试次数配置
+
+在超时时间后可配置 `retries="次数"`
+
+**超时配置规则：**
+
+- 超时重试次数，不包含第一次连接 0代表不重试
+- 幂等（查询，删除，修改）：设置重试次数
+- 非幂等（添加）：不设置重试次数
+
+**示例：**
+
+在服务实现类线程休眠模拟超时
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/5 14:27
+ */
+public class DemoServiceImpl implements DemoService {
+
+    public String demo(String name) {
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return name;
+    }
+}
+```
+
+配置超时重连5次
+
+```xml
+<dubbo:consumer
+        check="false"
+        timeout="5000"
+        retries="5"
+/>
+```
+
+启动测试
+
+服务调用6次，请求超时
+
+![image-20200908001234819](image-20200908001234819.png)
+
+![image-20200908001303362](image-20200908001303362.png)
+
+#### 11.1.3.2、模拟超时重连切换服务
+
+配置服务提供者并行运行，启动多个服务
+
+![image-20200908001451235](image-20200908001451235.png)
+
+![image-20200908001510270](image-20200908001510270.png)
+
+修改dubbo服务端口，启动多个。对服务实现类坐标记，方便查看
+
+![image-20200908001628276](image-20200908001628276.png)
+
+![image-20200908001641680](image-20200908001641680.png)
+
+启动三个服务，端口分别是：20881、20882、20883
+
+![image-20200908002648760](image-20200908002648760.png)
+
+启动消费者测试，分别查看三个服务，三个服务共调用6次
+
+![image-20200908002239914](image-20200908002239914.png)
+
+### 11.1.4、多版本
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/demos/multi-versions.html**
+
+当一个接口实现，出现不兼容升级时，可以用版本号过渡，版本号不同的服务相互间不引用。
+
+可以按照以下的步骤进行版本迁移：
+
+1. 在低压力时间段，先升级一半提供者为新版本
+2. 再将所有消费者升级为新版本
+3. 然后将剩下的一半提供者升级为新版本
+
+复制一个服务实现类，模拟新版本
+
+**在服务提供者通过`version`指定版本号**
+
+**v 2.0.0**
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/5 14:27
+ */
+public class DemoServiceImplNew implements DemoService {
+
+    public String demo(String name) {
+        System.out.println("----------new---------");
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return "传递过来的name"+name;
+    }
+}
+```
+
+**v 1.0.0**
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/5 14:27
+ */
+public class DemoServiceImplOld implements DemoService {
+
+    public String demo(String name) {
+        System.out.println("----------old---------");
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return "传递过来的name"+name;
+    }
+}
+```
+
+**配置服务**
+
+```xml
+<!--
+注册功能
+timeout：超时时间
+stub：是否配置本地存根
+-->
+<dubbo:service
+        interface="com.zh.service.DemoService"
+        ref="demoServiceImplOld"
+        timeout="3000"
+        version="1.0.0"
+        stub="com.zh.service.impl.DemoServiceImpl"
+/>
+<bean id="demoServiceImplOld" class="com.zh.service.impl.DemoServiceImplOld"></bean>
+
+<dubbo:service
+        interface="com.zh.service.DemoService"
+        ref="demoServiceImplNew"
+        timeout="3000"
+        version="2.0.0"
+/>
+<bean id="demoServiceImplNew" class="com.zh.service.impl.DemoServiceImplNew"></bean>
+```
+
+**消费端通过`version`指定版本号**
+
+***表示随机版本**
+
+```xml
+<dubbo:consumer
+        check="false"
+        timeout="5000"
+        retries="5"
+        version="*"
+/>
+<!--<dubbo:reference interface="com.zh.service.DemoService" version="1.0.0"/>-->
+```
+
+### 11.1.5、本地存根
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/demos/local-stub.html**
+
+例如：在调用远程服务前做判断不符合就调用本地的实现类
+
+一般本地存根和接口模块放在一起
+
+创建本地存根
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/7 23:18
+ */
+public class DemoServiceImpl implements DemoService {
+
+    private final DemoService demoService;
+
+    /**
+     * 传入DemoService远程代理对象
+     * @param demoService
+     */
+    public DemoServiceImpl(DemoService demoService){
+        super();
+        this.demoService = demoService;
+    }
+
+    /**
+     * 可以在调用服务做一些判断是调用远程实现还是本地实现
+     * @param name
+     * @return
+     */
+    public String demo(String name) {
+
+        if (name == null){
+            return demoService.demo(name);
+        }
+        return "我是本地存根";
+    }
+}
+```
+
+**配置**
+
+```xml
+<!--
+配置本地存根
+本地存根的实现一般在接口放
+提供者在service配置
+参考：http://dubbo.apache.org/zh-cn/docs/user/demos/local-stub.html
+消费者在reference配置stub
+stub="本地存根实现的全限定类名"
+-->
+<dubbo:service
+               interface="com.zh.service.DemoService"
+               ref="demoServiceImplOld"
+               timeout="3000"
+               version="1.0.0"
+               stub="com.zh.service.impl.DemoServiceImpl"
+               />
+```
+
+**测试**
+
+![image-20200908004208629](image-20200908004208629.png)	
+
+![image-20200908004239733](image-20200908004239733.png)
