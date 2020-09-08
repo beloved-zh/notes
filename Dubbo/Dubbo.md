@@ -1,4 +1,6 @@
-**SOA**：面向服务架构（Service-Oriented Architecture）**
+# 1、SOA
+
+**SOA**：面向服务架构（Service-Oriented Architecture）
 
 ## 1.1、SOA定位：
 
@@ -1330,3 +1332,475 @@ stub="本地存根实现的全限定类名"
 ![image-20200908004208629](image-20200908004208629.png)	
 
 ![image-20200908004239733](image-20200908004239733.png)
+
+## 11.2、SpringBoot配置
+
+### 11.2.1、在`application.properties`中配置属性
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/configuration/properties.html**
+
+- `@DubboService`：暴露服务
+
+- `@DubboReference`：引用服务
+
+- 在注解中添加相关配置
+
+  例如：
+
+  ```java
+  @DubboService(timeout = 3000)
+  @Service
+  public class TestServiceImpl implements TestService {
+      @Override
+      public String test() {
+          return "我是一个测试服务";
+      }
+  }
+  // --------------------------------------------------------------------------
+  @DubboReference(timeout = 3000)
+  private TestService testService;
+  ```
+
+### 11.2.2、保留Dubbo XML配置文件
+
+- 在启动类通过`@ImportResource(locations = "classpath:文件地址")`引入配置文件
+
+  ```java
+  @ImportResource(locations = "classpath:applicationContext-dubbo.xml")
+  @SpringBootApplication
+  public class ProviderServiceApplication {
+  
+     public static void main(String[] args) {
+        SpringApplication.run(ProviderServiceApplication.class, args);
+     }
+  
+  }
+  ```
+
+![image-20200908084059387](image-20200908084059387.png)
+
+### 11.2.3、通过配置类实现
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/configuration/api.html**
+
+```java
+package com.zh.config;
+
+import com.zh.service.TestService;
+import com.zh.service.impl.TestServiceImpl;
+import org.apache.dubbo.config.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * @author Beloved
+ * @date 2020/9/8 8:42
+ */
+@Configuration
+public class DubboConfig {
+
+    /*
+     * 可参考dubbo的xml配置文件
+     * 每一个标签对应一个xxxConfig
+     */
+    
+    // 应用配置
+    @Bean
+    public ApplicationConfig applicationConfig(){
+        ApplicationConfig application = new ApplicationConfig();
+        application.setName("provider-service");
+        return application;
+    }
+
+    // 连接注册中心配置
+    @Bean
+    public RegistryConfig registryConfig(){
+        RegistryConfig registry = new RegistryConfig();
+        registry.setProtocol("zookeeper");
+        registry.setAddress("120.55.45.177:2181");
+        registry.setUsername("root");
+        registry.setPassword("root");
+        return registry;
+    }
+
+    // 服务提供者协议配置
+    @Bean
+    public ProtocolConfig protocolConfig(){
+        ProtocolConfig protocol = new ProtocolConfig();
+        protocol.setName("dubbo");
+        protocol.setPort(20881);
+        return protocol;
+    }
+
+    // 服务提供者暴露服务配置
+    @Bean
+    public ServiceConfig<TestService> testServiceConfig(TestService testService){
+
+        ServiceConfig<TestService> config = new ServiceConfig<>();
+        // 使用全限定类名或对象任意一种即可
+        // config.setInterface("com.zh.service.impl.TestServiceImpl");
+        config.setInterface(TestService.class);
+        config.setRef(testService);
+        config.setVersion("1.0.0");
+
+        //配置每一个method信息
+        MethodConfig methodConfig = new MethodConfig();
+        methodConfig.setName("test");
+        methodConfig.setTimeout(5000);
+
+        List<MethodConfig> methods = new ArrayList<>();
+        methods.add(methodConfig);
+        // 将method配置在ServiceConfig中
+        config.setMethods(methods);
+
+        return config;
+    }
+
+    // ProviderConfig
+    // MonitorConfig
+}
+```
+
+![image-20200908091344358](image-20200908091344358.png)
+
+# 12、高可用
+
+## 12.1、zookeeper宕机与dubbo直连
+
+现象：zookeeper注册中心宕机，还可以消费dubbo暴露的服务
+
+健壮性：
+
+- 监控中心宕掉不影响使用，只是丢失部分采样数据
+- 数据库宕掉后，注册中心仍能通过缓存提供服务列表查询，但不能注册新服务
+- 注册中心对等集群，任意一台宕掉后，将自动切换到另一台
+- 注册中心全部宕掉后，服务提供者和服务消费者仍能通过本体缓存通讯
+- 服务提供者无状态，任意一台宕掉后，不影响使用
+- 服务提供者全部宕掉后，服务消费者应用将无法使用，并无限次重连等待服务提供者恢复
+
+高可用：通过设计，减少系统不能提供服务的时间
+
+**当zookeeper宕机后，服务消费方可以请求之前请求过缓存到本地的数据**
+
+关闭zookeeper，查看状态。消费者任然可以从缓存返回数据
+
+![image-20200908101147582](image-20200908101147582.png)
+
+![image-20200908101219764](image-20200908101219764.png)
+
+### 12.1.1、dubbo直连
+
+**当zookeeper宕机，可以通过配置的dubbo的url地址，不经过zookeeper直接连接服务提供者**
+
+**端口对应服务提供者配置的端口**
+
+```java
+@DubboReference(version = "1.0.0",url = "127.0.0.1:20881")
+private TestService testService;
+```
+
+测试手动停止zookeeper，可以消费服务
+
+## 12.2、集群下dubbo负载均衡配置
+
+在集群负载均衡时，Dubbo提供了很多种均衡配置，缺省为random随机调用
+
+### 12.2.1、负载均衡策略
+
+- **Random LoadBalance**
+  - 随机，按权重设置随机概率
+  - 在一个截面上碰撞的概率高，但调用量越大分布越均匀，而且按概率使用权重后也比较均匀，有利于动态调整提供者权重
+- **RoundRobin LoadBalance**
+  - 伦循，按公约后的权重设置轮伦循比率
+  - 存在慢的提供者累计请求的问题。
+    - 比如：第二台机器很慢，但没挂，当请求调到第二台时就卡在拿，久而久之，所有请求都卡在第二台
+
+- **LeastActive LoadBalance**
+  - 最少活跃调用数，相同活跃数的随机，活跃数调用前后计数差
+  - 使慢的提供者收到更少的请求，因为越慢的提供者的调用前后计数查越大
+- **ConsistencyHash LoadBalance**
+  - 一致性Hash，相同参数的请求总是发到同一提供者
+  - 当某一台提供者挂时，原本发往改提供者的请求，基于虚拟节点，平摊到其他提供者，不会引起剧烈变动
+  - 算法参见：http://en.wikipedia.org/wiki/Consistent_hashing
+  - 缺省只对第一个参数Hash，如果要修改，请配置`<dubbo:parameter key="hash.arguments" value="0,1" />`
+  - 缺省用160份虚拟节点，如果要修改，请配置`<dubbo:parameter key="hash.nodes" value="320" />`
+
+### 12.2.2、查看默认机制
+
+**开启多个服务提供者**
+
+修改服务提供者的web端口、dubbo端口、返回信息
+
+![image-20200908160758798](image-20200908160758798.png)
+
+![image-20200908160809622](image-20200908160809622.png)
+
+![image-20200908160835556](image-20200908160835556.png)
+
+分别启动20881、20882、20883   一个服务，三个提供者
+
+![image-20200908161603204](image-20200908161603204.png)
+
+![image-20200908160912828](image-20200908160912828.png)
+
+**开启消费者，进行测试**
+
+调用多次，发现是随机调用
+
+![image-20200908162902969](image-20200908162902969.png)
+
+**dubbo：的默认负载均衡策略是：随机（Random ）**
+
+在`LoadBalance`类中查看
+
+![image-20200908163220360](image-20200908163220360.png)
+
+### 12.2.3、配置机制
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/demos/loadbalance.html**
+
+- 随机（random）
+- 伦循（roundrobin）
+- 最少活跃调用数（roundrobin）
+- 一致性 Hash（consistenthash）
+
+**配置**
+
+- 服务端服务级别	
+
+```xml
+<dubbo:service interface="..." loadbalance="roundrobin" />
+```
+
+- 客户端服务级别
+
+```xml
+<dubbo:reference interface="..." loadbalance="roundrobin" />
+```
+
+- 服务端方法级别
+
+```xml
+<dubbo:service interface="...">
+    <dubbo:method name="..." loadbalance="roundrobin"/>
+</dubbo:service>
+```
+
+- 客户端方法级别
+
+```xml
+<dubbo:reference interface="...">
+    <dubbo:method name="..." loadbalance="roundrobin"/>
+</dubbo:reference>
+```
+
+### 12.2.4、示例
+
+#### 12.2.4.1、随机
+
+**设置权重**
+
+随机可以设置**权重**进行**按权重随机**
+
+权重在服务**提供者通过`weight=x`属性设置权重**
+
+```Java
+// 方式一
+@DubboService(weight = 1000)
+//方式二
+ServiceConfig<TestService> config = new ServiceConfig<>();
+config.setWeight(500);
+//方式三
+<dubbo:service
+    interface="com.zh.service.DemoService"
+    ref="demoServiceImplNew"
+    timeout="3000"
+    version="2.0.0"
+    weight="5000"
+/>
+```
+
+**权重一般是动态调整，通过dubbo-admin进行动态设置**
+
+![image-20200908164740003](image-20200908164740003.png)
+
+**测试**
+
+刷新多次调用，权重高的被多次调用
+
+```java
+@RestController
+public class MyController {
+
+    // 随机
+    @DubboReference(loadbalance="random")
+    private TestService testService;
+
+    @GetMapping("/")
+    public String index(){
+        return testService.test();
+    }
+}
+```
+
+![image-20200908165045718](image-20200908165045718.png)
+
+#### 12.2.4.2、伦循
+
+```java
+@RestController
+public class MyController {
+
+	// 伦循
+    @DubboReference(loadbalance="roundrobin")
+    private TestService testService;
+
+    @GetMapping("/")
+    public String index(){
+        return testService.test();
+    }
+}
+```
+
+**多次请求，按顺序执行。但是整体而言还是权重高的被多次调用**
+
+**第一次序号不确定**
+
+## 12.3、降级与容错
+
+### 12.3.1、服务降级
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/demos/service-downgrade.html**
+
+**什么是服务降级？**
+
+**当服务器压力剧增的情况下，根据实际业务情况及流量，对一些服务和页面有策略的不处理或换种简单的方式处理，从而释放服务器资源以保证核心交易正常运作或高效运作**
+
+可以通过服务降级功能临时屏蔽某个出错的非关键服务，并定义降级后的返回策略
+
+向注册中心写入动态配置覆盖规则：
+
+```java
+RegistryFactory registryFactory = ExtensionLoader.getExtensionLoader(RegistryFactory.class).getAdaptiveExtension();
+Registry registry = registryFactory.getRegistry(URL.valueOf("zookeeper://10.20.153.10:2181"));
+registry.register(URL.valueOf("override://0.0.0.0/com.foo.BarService?category=configurators&dynamic=false&application=foo&mock=force:return+null"));
+```
+
+其中：
+
+- `mock=force:return+null` 表示消费方对该服务的方法调用都直接返回 null 值，不发起远程调用。用来屏蔽不重要服务不可用时对调用方的影响。
+- 还可以改为 `mock=fail:return+null` 表示消费方对该服务的方法调用在失败后，再返回 null 值，不抛异常。用来容忍不重要服务不稳定时对调用方的影响。
+
+可以直接在dubbo-admin控制台，对消费者进行**屏蔽**或**容错**
+
+- 屏蔽：不发起远程调用，直接在客户端返回空（mock=force:return+null）
+- 容错：只有当远程调用出错后，才会返回空（mock=fail:return+null）
+
+![image-20200908172051196](image-20200908172051196.png)
+
+![image-20200908172103866](image-20200908172103866.png)
+
+### 12.3.2、集群容错
+
+**参考：http://dubbo.apache.org/zh-cn/docs/user/demos/fault-tolerent-strategy.html**
+
+**集群容错模式：**
+
+- Failfast Cluster
+  快速失败，只发起一次调用，失败立即报错。通常用于非幂等性的写操作，比如新增记录。
+
+- Failsafe Cluster
+
+  失败安全，出现异常时，直接忽略。通常用于写入审计日志等操作。
+
+- Failback Cluster
+
+  失败自动恢复，后台记录失败请求，定时重发。通常用于消息通知操作。
+
+- Forking Cluster
+
+  并行调用多个服务器，只要一个成功即返回。通常用于实时性要求较高的读操作，但需要浪费更多服务资源。可通过 `forks="2"` 来设置最大并行数。
+
+- Broadcast Cluster
+
+  广播调用所有提供者，逐个调用，任意一台报错则报错 [[2\]](http://dubbo.apache.org/zh-cn/docs/user/demos/fault-tolerent-strategy.html#fn2)。通常用于通知所有提供者更新缓存或日志等本地资源信息。
+
+**集群模式配置：**
+
+按照以下示例在服务提供方和消费方配置集群模式
+
+```xml
+<dubbo:service cluster="failsafe" />
+```
+
+或
+
+```xml
+<dubbo:reference cluster="failsafe" />
+```
+
+### 12.3.3、容错整合Hystrix
+
+Hystrix旨在通过控制哪些访问远程系统、服务和第三方库的节点，从而对延迟和故障提供更强大的容错能力。Hystrix具备拥有回退机制和断路器功能的线程和信号隔离，请求缓存和请求打包，以及监控和配置等功能
+
+**导入坐标：**
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+    <version>2.2.5.RELEASE</version>
+</dependency>
+```
+
+在启动类上添加**`@EnableHystrix`**注解开启Hystrix服务容错
+
+```java
+@EnableDubbo
+@EnableHystrix //开启服务容错
+@SpringBootApplication
+public class ConsumerServiceApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ConsumerServiceApplication.class, args);
+    }
+
+}
+```
+
+在服务提供者的服务实现类上添加**`@HystrixCommand`**注解，让Hystrix接管容错异常
+
+```java
+@HystrixCommand // Hystrix接管容错异常
+@Override
+public String test() {
+    // 模拟随机异常
+    if (Math.random() > 0.5){
+        throw new RuntimeException();
+    }
+    System.out.println("------------1------------");
+    return "------------1------------";
+}
+```
+
+在服务消费方使用**`@HystrixCommand`**注解，接管容错
+
+`fallbackMethod=`指定异常之后跳转的url
+
+```java
+@HystrixCommand(fallbackMethod = "errro")
+@GetMapping("/")
+public String index(){
+    return testService.test();
+}
+
+@GetMapping("/errro")
+public String errro(){
+    return "服务出现异常，已被Hystrix接管";
+}
+```
+
+测试刷新多次观察返回结果
