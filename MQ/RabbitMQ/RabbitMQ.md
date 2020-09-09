@@ -27,6 +27,10 @@ MQ，通过典型的`生产者`和`消费者`模型，生产者不断向消息�
 
 **官方教程：https://www.rabbitmq.com/#getstarted**
 
+**身份信息文档：https://www.rabbitmq.com/access-control.html**
+
+**配置：https://www.rabbitmq.com/configure.html#config-location**
+
 ## 2.1、AMQP协议
 
 **AMQP（advanced message queuing protocol）在2003年时被提出，最早用于解决金融领域不同平台之间的消息传递交互问题。顾名思义，AMQP是一种协议，更准确的说是一种binary wire-level protocol（链接协议）。这是其和JMS的本质差别，AMQP不从API层进行限定，而是直接定义网络交换的数据格式。这使得实现了AMQP的provider天然性是跨平台的。**
@@ -64,3 +68,140 @@ RabbitMQ下载地址：https://www.rabbitmq.com/download.html
 ![image-20200909164802480](image-20200909164802480.png)
 
 ![image-20200909164851518](image-20200909164851518.png)
+
+### 2.2.2、安装
+
+- 将下载的rpm包上传到服务器中
+
+- 安装**Erlang**
+
+  - ```bash
+    rpm -ivh erlang-22.3.4.10-1.el6.x86_64.rpm 
+    ```
+
+  - 查看Erlang版本
+
+    ```bash
+    erl –version
+    ```
+
+    ![image-20200909215200431](image-20200909215200431.png)
+
+- 安装**socat **依赖包
+
+  ```bash
+  yum install -y socat
+  ```
+
+- 安装**RabbitMQ**
+
+  ```bash
+  rpm -ivh rabbitmq-server-3.8.8-1.el7.noarch.rpm 
+  ```
+
+- 安装**RabbitMQ的Web界面插件**
+
+  ```bash
+  rabbitmq-plugins enable rabbitmq_management 
+  ```
+
+  默认端口**15672**，开启防火墙
+
+  ```bash
+  firewall-cmd --zone=public --add-port=15672/tcp --permanent   # 开启端口
+  systemctl restart firewalld.service							  # 重启防火墙
+  ```
+
+- **开启**
+
+  ```bash
+  systemctl start rabbitmq-server
+  ```
+
+- **查看状态**
+
+  ```bash
+  systemctl status rabbitmq-server
+  ```
+
+  ![image-20200909220013339](image-20200909220013339.png)
+
+- **外部访问**
+
+  http://192.168.245.200:15672/
+
+  ![image-20200909220118833](image-20200909220118833.png)
+
+  ![image-20200909222435153](image-20200909222435153.png)
+
+- **关闭**
+
+  ```bash
+  systemctl stop rabbitmq-server
+  ```
+
+### 2.2.3、常用命令
+
+#### 2.2.3.1、管理命令行
+
+```bash
+# 1.服务启动相关
+systemctl start|restart|stop|status rabbitmq-server
+
+# 2.管理命令行 用来在不使用web管理界面的情况下命令操作RabbitMQ
+rabbitmqctl help  # 可以查看更多命令
+
+# 3.插件管理命令行
+rabbitmq-plugins enable|list|disable
+```
+
+#### 2.2.3.2、管理账户
+
+```bash
+# 在rabbitmq的内部数据库添加用户；
+rabbitmqctl add_user <username> <password>  
+ 
+# 删除一个用户；
+rabbitmqctl delete_user <username>  
+ 
+# 改变用户密码（也是改变web管理登陆密码）；
+rabbitmqctl change_password <username> <newpassword>  
+ 
+# 清除用户的密码，该用户将不能使用密码登陆，但是可以通过SASL登陆如果配置了SASL认证；
+rabbitmqctl clear_password <username>
+ 
+# 设置用户tags；
+rabbitmqctl set_user_tags <username> <tag> ...
+ 
+# 列出用户；
+rabbitmqctl list_users  
+
+# 授权用户远程访问
+rabbitmqctl set_permissions -p / <username> "." "." ".*" 
+ 
+# 创建一个vhosts；
+rabbitmqctl add_vhost <vhostpath>  
+ 
+# 删除一个vhosts；
+rabbitmqctl delete_vhost <vhostpath>  
+ 
+# 列出vhosts；
+rabbitmqctl list_vhosts [<vhostinfoitem> ...]  
+ 
+# 针对一个vhosts给用户赋予相关权限；
+rabbitmqctl set_permissions [-p <vhostpath>] <user> <conf> <write> <read>  
+ 
+# 清除一个用户对vhosts的权限；
+rabbitmqctl clear_permissions [-p <vhostpath>] <username>  
+ 
+# 列出哪些用户可以访问该vhosts；
+rabbitmqctl list_permissions [-p <vhostpath>]  
+ 
+# 列出该用户的访问权限；
+rabbitmqctl list_user_permissions <username>  
+ 
+rabbitmqctl set_parameter [-p <vhostpath>] <component_name> <name> <value>
+rabbitmqctl clear_parameter [-p <vhostpath>] <component_name> <key>
+rabbitmqctl list_parameters [-p <vhostpath>]
+```
+

@@ -754,7 +754,6 @@ rpm -ql 包名				   # 文件安装的位置
 ```bash
 rpm -ql tree        # 查询
 rpm -e tree          # 卸载
-rpm -ql tree         # 查询
 ```
 
 **哪个软件包包含这个程序**
@@ -762,7 +761,7 @@ rpm -ql tree         # 查询
 ```bash
 rpm -qf `which 程序名`    #返回软件包的全名
 rpm -qif `which 程序名`   #返回软件包的有关信息
-rpm -qlf `which 程序名`   #返回软件包的文件列表[root@localhost ~]# rpm -qf `which sshd`
+rpm -qlf `which 程序名`   #返回软件包的文件列表
 ```
 
 **指定位置安装**
