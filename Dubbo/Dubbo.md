@@ -2,7 +2,7 @@
 
 **SOA**：面向服务架构（Service-Oriented Architecture）
 
-## 1.1、SOA定位：
+## 1.1、SOA定位
 
 - 如何**设计项目**，让开发时更有效率
 - SOA是一种思想
