@@ -105,9 +105,18 @@ RabbitMQ下载地址：https://www.rabbitmq.com/download.html
   rabbitmq-plugins enable rabbitmq_management 
   ```
 
-  默认端口**15672**，开启防火墙
+- **开启防火墙**
+
+  RabbitMQ需要开启3个端口
+
+  - **5627**：AMQP协议端口
+  - **25627**：集群内部通讯端口
+
+  - **15627**：http端口，web界面
 
   ```bash
+  firewall-cmd --zone=public --add-port=5672/tcp --permanent 
+  firewall-cmd --zone=public --add-port=25672/tcp --permanent 
   firewall-cmd --zone=public --add-port=15672/tcp --permanent   # 开启端口
   systemctl restart firewalld.service							  # 重启防火墙
   ```
@@ -205,3 +214,36 @@ rabbitmqctl clear_parameter [-p <vhostpath>] <component_name> <key>
 rabbitmqctl list_parameters [-p <vhostpath>]
 ```
 
+## 2.3、Web管理界面
+
+### 2.3.1、Overview
+
+![image-20200910092728173](image-20200910092728173.png)
+
+### 2.3.2、Connections
+
+![image-20200910092916450](image-20200910092916450.png)
+
+### 2.3.3、Channels
+
+![image-20200910093038197](image-20200910093038197.png)
+
+### 2.3.4、Exchanges
+
+![image-20200910093750497](image-20200910093750497.png)
+
+### 2.3.5、Queues
+
+![image-20200910094023834](image-20200910094023834.png)
+
+### 2.3.6、Admin
+
+#### 2.3.6.1、Users
+
+![image-20200910094542810](image-20200910094542810.png)
+
+![image-20200910100131409](image-20200910100131409.png)
+
+#### 2.3.6.2、Virtual Hosts
+
+![image-20200910100234950](image-20200910100234950.png)
