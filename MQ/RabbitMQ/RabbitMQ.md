@@ -256,6 +256,8 @@ rabbitmqctl list_parameters [-p <vhostpath>]
 
 ## 3.1、Hello World
 
+### 3.1.1、介绍
+
 **官网文档：https://www.rabbitmq.com/tutorials/tutorial-one-python.html**
 
 **点对点模式，不经过交换机，只有队列**
@@ -266,9 +268,7 @@ rabbitmqctl list_parameters [-p <vhostpath>]
 - C：消费者。消息的接收者，会一直等待消息的到来
 - queue：消息队列。红色部分，类似一个邮箱，可以缓存消息；生产者向其中投递消息，消费者取出消息
 
-### 3.1.1、发布
-
-#### **3.1.1.1、引入依赖**
+### **3.1.2、引入依赖**
 
 ```xml
 <!-- RabbitMQ客户端 -->
@@ -279,7 +279,7 @@ rabbitmqctl list_parameters [-p <vhostpath>]
 </dependency>
 ```
 
-#### **3.1.1.2、通过Web创建虚拟主机并绑定用户**
+### **3.1.3、通过Web创建虚拟主机并绑定用户**
 
 ![image-20200910164908686](image-20200910164908686.png)
 
@@ -287,7 +287,7 @@ rabbitmqctl list_parameters [-p <vhostpath>]
 
 ![image-20200910165006174](image-20200910165006174.png)
 
-#### 3.1.1.3、创建消息生产者
+### 3.1.4、创建消息生产者
 
 ```java
 package helloworld;
@@ -369,7 +369,7 @@ public class Provider {
 
 ![image-20200910170053553](image-20200910170053553.png)
 
-#### 3.1.1.4、创建消息消费者
+### 3.1.5、创建消息消费者
 
 **注意：消费者绑定的消息队列必须和生产者的参数==严格一致==**
 
@@ -450,7 +450,7 @@ public class Customer {
 
 ![image-20200910170509720](image-20200910170509720.png)
 
-#### 3.1.1.5、连接工具类封装
+### 3.1.6、连接工具类封装
 
 ```java
 package utils;
@@ -537,9 +537,9 @@ public class Customer {
 }
 ```
 
-#### 3.1.1.6、API参数细节
+### 3.1.7、API参数细节
 
-##### **消息队列的持久化**
+#### **消息队列的持久化**
 
 - true：已创建的消息队列，会在RabbitMQ重启后，将队列持久化到内存，下次开启恢复
 - false：已创建的队列，在RabbitMQ重启之后，会删除，不保存
@@ -574,7 +574,7 @@ systemctl restart rabbitmq-server
 
 ![image-20200910172438269](image-20200910172438269.png)
 
-##### 消息的持久化
+#### 消息的持久化
 
 消息的持久化要在发布消息时明确指出，不能只持久化队列
 
@@ -624,7 +624,7 @@ systemctl restart rabbitmq-server
 
 ![image-20200910174623991](image-20200910174623991.png)
 
-##### 是否自动删除队列
+#### 是否自动删除队列
 
 当消费者消费完消息，队列中没有其它消息，是否删除这个队列
 
@@ -659,3 +659,242 @@ channel.queueDeclare("test",false,false,false,null);
 **自动删除的队列已被删除**
 
 ![image-20200910175544929](image-20200910175544929.png)
+
+## 3.2、Work queues
+
+### 3.2.1、介绍
+
+**官方文档：https://www.rabbitmq.com/tutorials/tutorial-two-java.html**
+
+`work queues`，也被称为（`Task queues`）任务模型。当消息处理比较耗时的时候，可能生产消息的速度会远远大于消息的消费速度。长此以往，消息就会堆积越来越多，无法及时处理。此时就可以使用work模型，**让多个消费者绑定到一个队列，共同消费队列中的消息。**队列中的消息一旦消费，就会消失，因此任务是不会被重复执行的。
+
+![image-20200910213551365](image-20200910213551365.png)
+
+角色：
+
+- P：生产者：任务的发布者
+- C1：消费者-1，领取任务并且完成任务，假设完成速度较慢
+- C2：消费者-2：领取任务并完成任务，假设完成速度快
+
+### 3.2.2、创建消息生产者
+
+循环创建多条消息
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/10 22:11
+ */
+public class Provider {
+
+    public static void main(String[] args) throws IOException {
+        // 获取连接对象
+        Connection connection = RabbitMQUtils.getConnection();
+
+        // 获取通道对象
+        Channel channel = connection.createChannel();
+
+        // 通过通道声明队列
+        channel.queueDeclare("work",false,false,true,null);
+
+        for (int i = 0; i < 10; i++) {
+            // 生产消息
+            channel.basicPublish("","work",null,(i+":hello work").getBytes());
+        }
+
+        // 关闭资源
+        RabbitMQUtils.close(channel,connection);
+    }
+}
+```
+
+### 3.2.3、创建消息消费者-1
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/10 22:21
+ * 消费者1
+ */
+public class Customer1 {
+
+    public static void main(String[] args) throws IOException {
+        // 获取连接
+        Connection connection = RabbitMQUtils.getConnection();
+        Channel channel = connection.createChannel();
+
+        channel.queueDeclare("work",false,false,true,null);
+
+        channel.basicConsume("work",true,new DefaultConsumer(channel){
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("消费者-1："+new String(body));
+            }
+        });
+    }
+}
+```
+
+### 3.2.4、创建消息消费者-2
+
+**使用线程休眠，模拟消息处理速度慢**
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/10 22:21
+ * 消费者2
+ */
+public class Customer2 {
+
+    public static void main(String[] args) throws IOException {
+        // 获取连接
+        Connection connection = RabbitMQUtils.getConnection();
+        Channel channel = connection.createChannel();
+
+        channel.queueDeclare("work",false,false,true,null);
+
+        channel.basicConsume("work",true,new DefaultConsumer(channel){
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("消费者-2："+new String(body));
+            }
+        });
+
+    }
+}
+```
+
+### 3.2.5、启动测试
+
+1. 分别启动两个消息消费者
+2. 启动消息生产者
+
+![image-20200910225629924](image-20200910225629924.png)
+
+![image-20200910225643270](image-20200910225643270.png)
+
+通过观察，消费者-2虽然执行的慢，但是每个消费者消费的消息数都是相同的
+
+官方解释：https://www.rabbitmq.com/tutorials/tutorial-two-java.html
+
+![image-20200910230458334](image-20200910230458334.png)
+
+> **总结：默认情况下，RabbitMQ将按顺序将每个消息发送给下一个使用者。平均而言，每个消费者都会收到相同数量的消息。这种分发消息的方式称为循环**
+
+### 3.2.6、消息自动确认机制
+
+> Doing a task can take a few seconds. You may wonder what happens if one of the consumers starts a long task and dies with it only partly done. With our current code, once RabbitMQ delivers a message to the consumer it immediately marks it for deletion. In this case, if you kill a worker we will lose the message it was just processing. We'll also lose all the messages that were dispatched to this particular worker but were not yet handled.
+
+```java
+/*
+ * 绑定对象
+ * 1：队列名称
+ * 2：消息自动确认
+ *      true：消费者自动向RabbitMQ确认消息
+ *      false：不会自动确认消息
+*/
+channel.queueDeclare("work",false,false,true,null);
+```
+
+**如果是自动确认，RabbitMQ会一次性将每个消费者该处理的消息交给消费者，如果消息正在解析时服务宕机，剩余未解析的消息就会丢失。应该设置每一次只消费一个消息**
+
+![image-20200910231935636](image-20200910231935636.png)
+
+#### 设置每次消费一个消息
+
+```java
+public static void main(String[] args) throws IOException {
+        // 获取连接
+        Connection connection = RabbitMQUtils.getConnection();
+        Channel channel = connection.createChannel();
+
+        // 设置每一次只能消费一个消息
+        channel.basicQos(1);
+
+        channel.queueDeclare("work",false,false,true,null);
+
+        /*
+         * 绑定对象
+         * 1：队列名称
+         * 2：消息自动确认
+         *      true：消费者自动向RabbitMQ确认消息
+         *      false：不会自动确认消息
+         */
+        channel.basicConsume("work",false,new DefaultConsumer(channel){
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("消费者-1："+new String(body));
+            }
+        });
+    }
+```
+
+**设置每次只消费一个消息并且关闭消息自动确认**
+
+#### 启动测试
+
+![image-20200910233519481](image-20200910233519481.png)
+
+![image-20200910233530434](image-20200910233530434.png)
+
+![image-20200910233722330](image-20200910233722330.png)
+
+**观察发现，消息并没有消费完，每个消费者只消费一个消息，且web界面显示两个消息未确认**
+
+**关闭了消息自动确认，应该手动去确认消息**
+
+#### 手动确认消息
+
+**通过`channel.basicAck()`设置手动确认消息**
+
+- 参数1：确认队列中那个具体消息
+- 参数2：是否开启多个消息同时确认
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接
+    Connection connection = RabbitMQUtils.getConnection();
+    final Channel channel = connection.createChannel();
+
+    // 设置每一次只能消费一个消息
+    channel.basicQos(1);
+
+    channel.queueDeclare("work",false,false,true,null);
+
+    /*
+     * 绑定对象
+     * 1：队列名称
+     * 2：消息自动确认
+     *      true：消费者自动向RabbitMQ确认消息
+     *      false：不会自动确认消息
+     */
+    channel.basicConsume("work",false,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者-1："+new String(body));
+            /*
+             * 手动确认消息
+             *  1：确认队列中那个具体消息
+             *  2：是否开启多个消息同时确认
+             */
+            channel.basicAck(envelope.getDeliveryTag(),false);
+        }
+    });
+}
+```
+
+#### 启动测试
+
+**消费快的消费的消息多，消费慢的消费少，web页面显示以消费完成**
+
+![image-20200910234614357](image-20200910234614357.png)
+
+![image-20200910234631369](image-20200910234631369.png)
+
+![image-20200910234645832](image-20200910234645832.png)
