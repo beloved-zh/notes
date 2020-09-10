@@ -247,3 +247,415 @@ rabbitmqctl list_parameters [-p <vhostpath>]
 #### 2.3.6.2、Virtual Hosts
 
 ![image-20200910100234950](image-20200910100234950.png)
+
+# 3、消息模型
+
+**RabbitMQ支持七种消息模型**
+
+**官放文档：https://www.rabbitmq.com/getstarted.html**
+
+## 3.1、Hello World
+
+**官网文档：https://www.rabbitmq.com/tutorials/tutorial-one-python.html**
+
+**点对点模式，不经过交换机，只有队列**
+
+![image-20200910165115829](image-20200910165115829.png)
+
+- P：生产者。也就是要发送消息的程序
+- C：消费者。消息的接收者，会一直等待消息的到来
+- queue：消息队列。红色部分，类似一个邮箱，可以缓存消息；生产者向其中投递消息，消费者取出消息
+
+### 3.1.1、发布
+
+#### **3.1.1.1、引入依赖**
+
+```xml
+<!-- RabbitMQ客户端 -->
+<dependency>
+    <groupId>com.rabbitmq</groupId>
+    <artifactId>amqp-client</artifactId>
+    <version>5.9.0</version>
+</dependency>
+```
+
+#### **3.1.1.2、通过Web创建虚拟主机并绑定用户**
+
+![image-20200910164908686](image-20200910164908686.png)
+
+绑定用户
+
+![image-20200910165006174](image-20200910165006174.png)
+
+#### 3.1.1.3、创建消息生产者
+
+```java
+package helloworld;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * @author Beloved
+ * @date 2020/9/10 15:01
+ */
+public class Provider {
+
+
+    /**
+     * 生产消息
+     */
+    @Test
+    public void testSendMessage() throws IOException, TimeoutException {
+
+        // 创建连接MQ的连接工厂对象
+        ConnectionFactory factory = new ConnectionFactory();
+        // 设置连接RabbitMQ主机
+        factory.setHost("192.168.245.200");
+        // 设置端口
+        factory.setPort(5672);
+        // 设置连接那个虚拟主机
+        factory.setVirtualHost("/hello");
+        // 设置访问虚拟主机的用户名密码
+        factory.setUsername("admin");
+        factory.setPassword("admin");
+
+        // 获取连接对象
+        Connection connection = factory.newConnection();
+
+        // 获取连接种通道
+        Channel channel = connection.createChannel();
+
+        /*
+         * 通道绑定对应的消息队列
+         *   1：队列名称 如果队列不存在自动创建
+         *   2：用于定义队列是否需要持久化
+         *      true：队列信息会持久化到磁盘，关闭重启之后队列也会存在
+         *      false：在下一次重启，队列会被删除
+         *   3：是否独占队列
+         *      true：这个队列只能当前连接使用，其他连接不可以使用
+         *      false：可以被其他连接使用
+         *   4：是否在消费完成后自动删除队列
+         *      true：自动删除
+         *      false：不删除
+         *   5：额外参数
+         */
+        channel.queueDeclare("hello",false,false,false,null);
+
+        /*
+         * 发布消息
+         *  1：交换机名称 这里没有
+         *  2：队列名称
+         *  3：传递消息额外设置：可配置消息是否持久化等
+         *  4：消息的具体内容
+         *
+         */
+        channel.basicPublish("","hello",null,"Hello RabitMQ！".getBytes());
+
+        // 关闭
+        channel.close();
+        connection.close();
+    }
+
+}
+```
+
+启动测试。web界面查看，已经自动创建消息队列
+
+![image-20200910170053553](image-20200910170053553.png)
+
+#### 3.1.1.4、创建消息消费者
+
+**注意：消费者绑定的消息队列必须和生产者的参数==严格一致==**
+
+```java
+package helloworld;
+
+import com.rabbitmq.client.*;
+import org.junit.Test;
+import utils.RabbitMQUtils;
+
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * @author Beloved
+ * @date 2020/9/10 15:25
+ */
+public class Customer {
+
+    public static void main(String[] args) throws IOException, TimeoutException {
+        // 创建连接MQ的连接工厂对象
+        ConnectionFactory factory = new ConnectionFactory();
+        // 设置连接RabbitMQ主机
+        factory.setHost("192.168.245.200");
+        // 设置端口
+        factory.setPort(5672);
+        // 设置连接那个虚拟主机
+        factory.setVirtualHost("/hello");
+        // 设置访问虚拟主机的用户名密码
+        factory.setUsername("admin");
+        factory.setPassword("admin");
+
+        // 获取连接对象
+        Connection connection = factory.newConnection();
+
+        // 获取连接种通道
+        Channel channel = connection.createChannel();
+
+        // 通道绑定对象
+        channel.queueDeclare("hello",false,false,false,null);
+
+        /*
+         * 消费消息
+         *   1.队列名称  消费那个队列的消息
+         *   2.开启消息的自动确认机制
+         *   3.消费消息时的回调接口
+         */
+        channel.basicConsume("hello",true,new DefaultConsumer(channel){
+            /**
+             * @param consumerTag 标签
+             * @param envelope 信封
+             * @param properties 属性
+             * @param body  消息队列中取出的消息
+             * @throws IOException
+             */
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("new String(boby) = " + new String(body));
+            }
+        });
+
+        /*
+         * 如果不关闭就会一直监听消息队列
+         * 不建议关闭
+         * 关闭会发生，子线程还没有处理完，主线程已经关闭，消费被消费但获取不到
+         */
+        // channel.close();
+        // connection.close();
+    }
+}
+```
+
+**注意：这个是多线程的，不建议关闭连接，当关闭连接，消息已经消费，但还没有解析取出，主线程已经关闭，不能取出消息**
+
+启动测试
+
+![image-20200910170443736](image-20200910170443736.png)
+
+![image-20200910170509720](image-20200910170509720.png)
+
+#### 3.1.1.5、连接工具类封装
+
+```java
+package utils;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+
+/**
+ * @author Beloved
+ * @date 2020/9/10 15:48
+ */
+public class RabbitMQUtils {
+
+    private static ConnectionFactory connectionFactory;
+
+    static {
+        // 重量级资源 类加载执行只执行一次
+        // 创建连接MQ的连接工厂对象
+        connectionFactory = new ConnectionFactory();
+        // 设置连接RabbitMQ主机
+        connectionFactory.setHost("192.168.245.200");
+        // 设置端口
+        connectionFactory.setPort(5672);
+        // 设置连接那个虚拟主机
+        connectionFactory.setVirtualHost("/hello");
+        // 设置访问虚拟主机的用户名密码
+        connectionFactory.setUsername("admin");
+        connectionFactory.setPassword("admin");
+    }
+
+    // 定义提供连接对象的方法
+    public static Connection getConnection(){
+        try {
+            return connectionFactory.newConnection();
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    // 关闭通道和关闭连接
+    public static void close(Channel channel,Connection connection){
+        try {
+            if(channel != null) channel.close();
+            if(connection != null) connection.close();
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+**测试**
+
+```java
+====================================生产者=======================================
+public class Provider {
+    @Test
+    public void testSendMessage() throws IOException, TimeoutException {
+        // 通过工具类获取连接对象
+        Connection connection = RabbitMQUtils.getConnection();
+        Channel channel = connection.createChannel();
+        channel.queueDeclare("hello",false,false,false,null);
+        channel.basicPublish("","hello",null,"Hello RabitMQ！".getBytes());
+        // 通过工具关闭连接
+        RabbitMQUtils.close(channel,connection);
+    }
+}
+====================================消费者=======================================
+public class Customer {
+    public static void main(String[] args) throws IOException, TimeoutException {
+        // 通过工具类获取连接对象
+        Connection connection = RabbitMQUtils.getConnection();
+        Channel channel = connection.createChannel();
+        channel.queueDeclare("hello",false,false,false,null);
+        channel.basicConsume("hello",true,new DefaultConsumer(channel){
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+                System.out.println("new String(boby) = " + new String(body));
+            }
+        });
+    }
+}
+```
+
+#### 3.1.1.6、API参数细节
+
+##### **消息队列的持久化**
+
+- true：已创建的消息队列，会在RabbitMQ重启后，将队列持久化到内存，下次开启恢复
+- false：已创建的队列，在RabbitMQ重启之后，会删除，不保存
+
+**创建两个消息队列**
+
+- hello：持久化
+- test：不持久化
+
+```java
+// 第二个参数定义队列持久化
+// ......
+// hello 持久化：true
+channel.queueDeclare("hello",true,false,false,null);
+// ========================================================
+// test 持久化：false
+channel.queueDeclare("test",false,false,false,null);
+// ......
+```
+
+![image-20200910172200092](image-20200910172200092.png)
+
+**重启RabbitMQ**
+
+```bash
+systemctl restart rabbitmq-server
+```
+
+查看消息队列信息
+
+**只剩hello。但是队列虽然持久化，消息却没有**
+
+![image-20200910172438269](image-20200910172438269.png)
+
+##### 消息的持久化
+
+消息的持久化要在发布消息时明确指出，不能只持久化队列
+
+通过`MessageProperties`设置。属性：
+
+参考：https://www.rabbitmq.com/releases/rabbitmq-java-client/v3.1.5/rabbitmq-java-client-javadoc-3.1.5/com/rabbitmq/client/MessageProperties.html
+
+- MINIMAL_BASIC：为空的基本属性，没有设置字段
+- MINIMAL_PERSISTENT_BASIC：基本属性为空，只有deliveryMode设置为2(持久性)
+- BASIC：内容类型“应用程序/八位字节流”，deliveryMode 1（非持久性），优先级为零
+- PERSISTENT_BASIC：内容类型“应用程序/八位字节流”，deliveryMode 2（永久），优先级为零
+- TEXT_PLAI：内容类型“文本/纯文本”，deliveryMode 1（非持久性），优先级为零
+- PERSISTENT_TEXT_PLAIN：内容类型“文本/纯文本”，deliveryMode 2（永久），优先级为零
+
+**创建两个消息队列**
+
+- hello：持久化、消息持久化
+- test：持久化，消息不持久化
+
+```java
+// ......
+// hello 队列持久化、消息持久化
+channel.queueDeclare("hello",true,false,false,null);
+channel.basicPublish("","hello", MessageProperties.PERSISTENT_TEXT_PLAIN,"Hello RabitMQ！".getBytes());
+// =================================================================================
+// test 队列持久化、消息不持久化
+channel.queueDeclare("test",true,false,false,null);
+channel.basicPublish("","test", MessageProperties.TEXT_PLAIN,"Hello RabitMQ！".getBytes());
+// ......
+```
+
+![image-20200910174344717](image-20200910174344717.png)
+
+**重启RabbitMQ**
+
+```bash
+systemctl restart rabbitmq-server
+```
+
+查看消息队列信息
+
+**可以看出持久化的消息被恢复了**
+
+![image-20200910174510885](image-20200910174510885.png)
+
+**获取消息**
+
+![image-20200910174623991](image-20200910174623991.png)
+
+##### 是否自动删除队列
+
+当消费者消费完消息，队列中没有其它消息，是否删除这个队列
+
+**创建两个消息队列**
+
+- hello：自动删除
+- test：不自动删除
+
+```java
+// ......
+// 第四个属性
+// hello 自动删除
+channel.queueDeclare("hello",false,false,true,null);
+// ==================================================================
+// test 不自动删除
+channel.queueDeclare("test",false,false,false,null);
+// ......
+```
+
+![image-20200910175142501](image-20200910175142501.png)
+
+**分别消费两个队列中的信息**
+
+发现`hello`开启了自动删除，消息已被消费，但没有删除
+
+**这是因为`hello`的消费者，线程还没有关闭，程序在运行**
+
+![image-20200910175402318](image-20200910175402318.png)
+
+手动关闭消费者程序，查看
+
+**自动删除的队列已被删除**
+
+![image-20200910175544929](image-20200910175544929.png)
