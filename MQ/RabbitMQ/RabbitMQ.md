@@ -1029,7 +1029,7 @@ public static void main(String[] args) throws IOException {
     /*
      * 将通道声明指定交换机
      *   1：交换价名称
-     *   2：交换机类型：direct 广播类型
+     *   2：交换机类型：direct
      */
     String exchangeName = "logs_direct";
     channel.exchangeDeclare(exchangeName,"direct");
@@ -1135,5 +1135,148 @@ public static void main(String[] args) throws IOException {
 
 ![image-20200912013712969](image-20200912013712969.png)
 
-### 
+## 3.5、Topic
 
+### 3.5.1、介绍
+
+`Topic`类型的`Exchange`与`Direct`相比，都是可以根据`RoutingKey`吧消息路由到不同队列。只不过`Topic`类型`Exchange`可以让队列在绑定`RoutingKey`的时候使用通配符！这种模型`RoutingKey`一般都是由一个或多个单词组成，多个单词之间以`.`分割，例如：`item.insert`
+
+**Topic（动态路由）：Routing在发布消息时，可以指定`RoutingKey`但是如果某一个消费者由很多`RoutingKey`就会写很多代码，使用Topic可以使用通配符解决这个问题**
+
+![image-20200912014409567](image-20200912014409567.png)
+
+### 3.5.2、通配符
+
+官网说明
+
+```bahs
+* (star) can substitute for exactly one word.
+# (hash) can substitute for zero or more words.
+```
+
+单词前后都可以写通配符
+
+**`*`:**
+
+- 只能代替一个单词
+- 例如：user.*
+  - 可以匹配：user.add、user.delete
+  - 不可匹配：user、user.add.aa、user.delete.bb
+
+**`#`:**
+
+- 可以替换零个或多个单词
+- 例如：user.#
+  - 可以匹配：user、user.add、user.add.aaa、user.....
+
+### 3.5.3、生产者
+
+**routingKey设置动态路由，多个用`.`分割**
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    /*
+         * 将通道声明指定交换机
+         *   1：交换价名称
+         *   2：交换机类型：topic
+         */
+    String exchangeName = "topic";
+    channel.exchangeDeclare(exchangeName,"topic");
+
+    // 发送消息
+    String routingKey = "user.add"; // 动态路由
+    channel.basicPublish(exchangeName,routingKey,null,("这是topic模型发布的基于route key：["+routingKey+"]发送的消息").getBytes());
+
+    // 关闭资源
+    RabbitMQUtils.close(channel,connection);
+}
+```
+
+### 3.5.4、消费者1-*
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    String exchangeName = "topic";
+
+    // 通道绑定交换机
+    channel.exchangeDeclare(exchangeName,"topic");
+
+    // 临时队列
+    String queueName = channel.queueDeclare().getQueue();
+
+    // 基于routeKey动态通配符形式绑定交换机和队列
+    channel.queueBind(queueName,exchangeName,"user.*");
+
+    // 消费消息
+    channel.basicConsume(queueName,true,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者1-*：" + new String(body));
+        }
+    });
+
+}
+```
+
+### 3.5.5、消费者2-#
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    String exchangeName = "topic";
+
+    // 通道绑定交换机
+    channel.exchangeDeclare(exchangeName,"topic");
+
+    // 临时队列
+    String queueName = channel.queueDeclare().getQueue();
+
+    // 基于routeKey动态通配符形式绑定交换机和队列
+    channel.queueBind(queueName,exchangeName,"user.#");
+
+    // 消费消息
+    channel.basicConsume(queueName,true,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者2-#：" + new String(body));
+        }
+    });
+
+}
+```
+
+### 3.3.6、测试
+
+**测试1：user**
+
+![image-20200912021203979](image-20200912021203979.png)
+
+- 消费者1-*：false
+- 消费者2-#：true
+
+**测试2：user.add**
+
+![image-20200912021316044](image-20200912021316044.png)
+
+- 消费者1-*：true
+- 消费者2-#：true
+
+**测试3：user.add.aaa**
+
+![image-20200912021425965](image-20200912021425965.png)
+
+- 消费者1-*：false
+- 消费者2-#：true
+
+**通配符也可以写在RoutingKey的前面**
