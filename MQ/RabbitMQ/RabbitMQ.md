@@ -898,3 +898,125 @@ public static void main(String[] args) throws IOException {
 ![image-20200910234631369](image-20200910234631369.png)
 
 ![image-20200910234645832](image-20200910234645832.png)
+
+## 3.3、Fanout
+
+### 3.3.1、介绍
+
+**官方文档：https://www.rabbitmq.com/tutorials/tutorial-three-java.html**
+
+**fanout**：Publish/Subscribe 也称为广播
+
+![image-20200911234931554](image-20200911234931554.png)
+
+在广播模式下，消息发送流程：
+
+- 可以有多个消费者
+- 每个**消费者都有自己的queue**（队列）
+- 每个**队列都要绑定到Exchange**（交换机）
+- **生产者发送的消息，只能发送到交换机，交换机来决定要发送给那个队列，生产者无法决定**
+- 交换机吧消息发送给绑定过的所有队列
+- 队列的消费者都能拿到消息。实现一条消息被多个消费者消费
+
+**默认交换机**
+
+![image-20200911235902935](image-20200911235902935.png)
+
+### 3.3.2、生产者
+
+**交换机类型：fanout**
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    /*
+     * 将通道声明指定交换机、没有就会自动创建
+     *   1：交换价名称
+     *   2：交换机类型：fanout 广播类型
+     */
+    channel.exchangeDeclare("logs","fanout");
+
+    // 发送消息
+    channel.basicPublish("logs","",null,"广播消息".getBytes());
+
+    // 关闭资源
+    RabbitMQUtils.close(channel,connection);
+}
+```
+
+![image-20200912000719233](image-20200912000719233.png)
+
+### 3.3.3、消费者
+
+**分别创建三个消费者，代码都一样。为每个消费者绑定一个临时队列**
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    // 通道绑定交换机
+    channel.exchangeDeclare("logs","fanout");
+
+    // 临时队列，每个消费者都有自己的临时队列，消费结束就会删除
+    String queueName = channel.queueDeclare().getQueue();
+
+    // 绑定交换机和队列
+    channel.queueBind(queueName,"logs","");
+
+    // 消费消息
+    channel.basicConsume(queueName,true,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者1：" + new String(body));
+        }
+    });
+
+}
+```
+
+### 3.3.4、启动测试
+
+**分别启动三个消费者。多了三个临时队列**
+
+![image-20200912002535095](image-20200912002535095.png)
+
+**启动生产者。消息已被广播到全部消费者，所有的消费者都可以收到**
+
+![image-20200912002708043](image-20200912002708043.png)
+
+![image-20200912002720595](image-20200912002720595.png)
+
+![image-20200912002730391](image-20200912002730391.png)
+
+**手动关闭所有消费者。所有临时队列已被删除**
+
+![image-20200912002852169](image-20200912002852169.png)
+
+## 3.4、Routing
+
+### 3.4.1、介绍
+
+**官方文档：https://www.rabbitmq.com/tutorials/tutorial-four-java.html**
+
+**在`Fanout`模式中，一条消息，会被所有订阅的队列都消费。但是，在某些场景下，希望不同的消息被不同的队列消费。**
+
+- 队列与交换机的绑定，不能是任意绑定了，而是需要指定一个`RoutingKey`（路由key）
+- 消息的发送方在向Exchange发送消息时，也必须指定消息的`RoutingKey`
+- Exchange不再吧消息交给每一个绑定的队列，而是根据消息的`RoutingKey`进行判断，只有队列的`RoutingKey`与消息的`RoutingKey`完全一致，才会接收到消息
+
+![image-20200912010014468](image-20200912010014468.png)
+
+- P：生产者，向Exchange发送消息，发送消息时，会指定一个`RoutingKey`
+- X：Exchange（交换机），接收生产者的消息，然后吧消息递交给与`RoutingKey`完全匹配的队列
+- C1：消息者，其所在队列指定了需要`RoutingKey`为error的消息
+- C2：消费者，其所在队列指定了需要`RoutingKey`为info、error、warning的消息
+
+### 3.4.2、生产者
+
+
+
