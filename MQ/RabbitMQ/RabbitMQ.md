@@ -1018,5 +1018,122 @@ public static void main(String[] args) throws IOException {
 
 ### 3.4.2、生产者
 
+**发送消息可以指定routingKey来发送**
 
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    /*
+     * 将通道声明指定交换机
+     *   1：交换价名称
+     *   2：交换机类型：direct 广播类型
+     */
+    String exchangeName = "logs_direct";
+    channel.exchangeDeclare(exchangeName,"direct");
+
+    // 发送消息
+    String routingKey = "error";
+    channel.basicPublish(exchangeName,routingKey,null,("这是direct模型发布的基于route key：["+routingKey+"]发送的消息").getBytes());
+
+    // 关闭资源
+    RabbitMQUtils.close(channel,connection);
+}
+```
+
+![image-20200912013201062](image-20200912013201062.png)
+
+### 3.4.3、消费者1
+
+**指定routingKey为error**
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    String exchangeName = "logs_direct";
+
+    // 通道绑定交换机
+    channel.exchangeDeclare(exchangeName,"direct");
+
+    // 临时队列
+    String queueName = channel.queueDeclare().getQueue();
+
+    // 基于routeKey绑定交换机和队列
+    channel.queueBind(queueName,exchangeName,"error");
+
+    // 消费消息
+    channel.basicConsume(queueName,true,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者1：" + new String(body));
+        }
+    });
+
+}
+```
+
+### 3.4.4、消费者2
+
+**指定routingKey为info、error、warning**
+
+```java
+public static void main(String[] args) throws IOException {
+    // 获取连接对象
+    Connection connection = RabbitMQUtils.getConnection();
+    Channel channel = connection.createChannel();
+
+    String exchangeName = "logs_direct";
+
+    // 通道绑定交换机
+    channel.exchangeDeclare(exchangeName,"direct");
+
+    // 临时队列
+    String queueName = channel.queueDeclare().getQueue();
+
+    // 基于routeKey绑定交换机和队列
+    channel.queueBind(queueName,exchangeName,"info");
+    channel.queueBind(queueName,exchangeName,"error");
+    channel.queueBind(queueName,exchangeName,"warning");
+
+    // 消费消息
+    channel.basicConsume(queueName,true,new DefaultConsumer(channel){
+        @Override
+        public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body) throws IOException {
+            System.out.println("消费者2：" + new String(body));
+        }
+    });
+
+}
+```
+
+### 3.4.5、启动测试
+
+**测试1：**
+
+- 发送routingKey为info的消息
+- 消费者2的routingKey中有info，所以只有消费者2接收到消息，消费者1没有接收
+
+![image-20200912013415739](image-20200912013415739.png)
+
+![image-20200912013501330](image-20200912013501330.png)
+
+![image-20200912013513314](image-20200912013513314.png)
+
+**测试2：**
+
+- 发送routingKey为error的消息
+- 两个消费者都有error的routingKey，所有都能接收到
+
+![image-20200912013651971](image-20200912013651971.png)
+
+![image-20200912013722126](image-20200912013722126.png)
+
+![image-20200912013712969](image-20200912013712969.png)
+
+### 
 
