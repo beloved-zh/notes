@@ -1280,3 +1280,385 @@ public static void main(String[] args) throws IOException {
 - 消费者2-#：true
 
 **通配符也可以写在RoutingKey的前面**
+
+# 4、SpringBoot
+
+## 4.1、搭建环境
+
+**导入依赖**
+
+```xml
+<!-- RabbitMQ-SpringBoot -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+```
+
+**配置RabbitMQ**
+
+```yaml
+spring:
+  application:
+    name: rabbitmq-springboot
+
+# 配置RabbitMQ
+  rabbitmq:
+    host: 192.168.245.200   # 主机地址
+    port: 5672				# 端口
+    username: admin			# 用户名
+    password: admin			# 密码
+    virtual-host: /hello	# 虚拟主机
+```
+
+`RabbitTemplate`：用来简化操作，使用时候直接自动注入
+
+## 4.2、Hello World
+
+### 4.2.1、生产者
+
+```java
+// 注入RabbitTemplate
+@Autowired
+private RabbitTemplate rabbitTemplate;
+
+// hello world
+@Test
+void hello() {
+    /*
+         * 1：队列名称
+         * 2：消息
+         */
+    rabbitTemplate.convertAndSend("hello","hello world!");
+}
+```
+
+启动并没有创建队列是因为没有消费者，队列的创建应该是在消费者放
+
+![image-20200912180818250](image-20200912180818250.png)
+
+### 4.2.2、消费者
+
+- **队列是在消费者这边进行创建**
+
+- **`@RabbitListener`注解进行监听是否是消费者**
+
+  - **`queuesToDeclare`：如果没有队列就会声明一个新的队列**
+
+    - **`@Queue`：声明队列**
+
+      - **`value`：队列名称**
+      - **`durable`：是否持久化队列**
+      - **`autoDelete`：是否自动删除**
+      - **......**
+
+      ![image-20200912183920829](image-20200912183920829.png)
+
+- **`@RabbitHandler`注解方法，该方法就是从队列获取消息后的回调方法，参数就是消息**
+
+```java
+package com.zh.hello;
+
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.RabbitHandler;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author Beloved
+ * @date 2020/9/12 18:10
+ */
+@Component
+/*
+ * @RabbitListener：消费者的监听
+ *      queuesToDeclare：没有队列声明队列
+ *          @Queue：队列，通过属性可以设置队列信息
+ *              value：队列名称
+ */
+@RabbitListener(queuesToDeclare = @Queue(value = "hello"))
+public class HelloCustomer {
+
+    // 从队列中取出消息的回调方法
+    @RabbitHandler
+    public void customer(String message){
+        System.out.println("message = " + message);
+    }
+}
+```
+
+### 4.2.3、启动测试
+
+直接启动生产者，发布消息，消费者会直接监听到
+
+![image-20200912182136367](image-20200912182136367.png)
+
+![image-20200912182157505](image-20200912182157505.png)
+
+## 4.3、Work
+
+### 4.3.1、生产者
+
+```java
+// 注入RabbitTemplate
+@Autowired
+private RabbitTemplate rabbitTemplate;
+
+// work
+@Test
+void work() {
+    for (int i = 0; i < 10; i++) {
+        rabbitTemplate.convertAndSend("work","work模型"+i);
+    }
+}
+```
+
+### 4.3.2、消费者
+
+**`@RabbitListener`也可以直接定义在方法上，可以不需要`@RabbitHandler`**
+
+```java
+package com.zh.work;
+
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author Beloved
+ * @date 2020/9/12 18:25
+ */
+@Component
+public class WorkCustomer {
+
+    // 消费者1
+    @RabbitListener(queuesToDeclare = @Queue("work"))
+    public void customer1(String message){
+        System.out.println("message1 = " + message);
+    }
+
+    // 消费者2
+    @RabbitListener(queuesToDeclare = @Queue("work"))
+    public void customer2(String message){
+        System.out.println("message2 = " + message);
+    }
+
+}
+```
+
+### 4.3.3、测试
+
+![image-20200912183015061](image-20200912183015061.png)
+
+![image-20200912183032426](image-20200912183032426.png)
+
+**说明：默认在Spring AMQP实现中Work这种方式就是公平调度，如果需要实现能者多劳需要额外配置**
+
+## 4.4、Fanout
+
+### 4.4.1、生产者
+
+```java
+// 注入RabbitTemplate
+@Autowired
+private RabbitTemplate rabbitTemplate;
+
+/*
+ * fanout 广播
+ *  1：交换机名称
+ *  2：队列名
+ */
+@Test
+void fanout() {
+    rabbitTemplate.convertAndSend("logs","","Fanout广播消息");
+}
+```
+
+### 4.4.2、消费者
+
+```java
+package com.zh.fanout;
+
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author Beloved
+ * @date 2020/9/12 18:46
+ */
+@Component
+public class FanoutCustomer {
+
+    @RabbitListener(bindings = { // bindings：绑定交换机和队列
+            @QueueBinding(
+                    value = @Queue, // 不指定队列名生产临时队列
+                    exchange = @Exchange(value = "logs", type = "fanout") // 绑定交换机
+            )
+    })
+    public void customer1(String message) {
+        System.out.println("message1 = " + message);
+    }
+
+    @RabbitListener(bindings = { // bindings：绑定交换机和队列
+            @QueueBinding(
+                    value = @Queue, // 不指定队列名生产临时队列
+                    exchange = @Exchange(value = "logs", type = "fanout") // 绑定交换机
+            )
+    })
+    public void customer2(String message) {
+        System.out.println("message2 = " + message);
+    }
+}
+```
+
+### 4.4.3、测试
+
+![image-20200912185113083](image-20200912185113083.png)
+
+![image-20200912185127605](image-20200912185127605.png)
+
+## 4.5、Route
+
+### 4.5.1、生产者
+
+```java
+// 注入RabbitTemplate
+@Autowired
+private RabbitTemplate rabbitTemplate;
+
+// route 路由模式
+@Test
+void route() {
+    rabbitTemplate.convertAndSend("route","info","发送info的key的路由信息");
+}
+```
+
+### 4.5.2、消费者
+
+```java
+package com.zh.route;
+
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author Beloved
+ * @date 2020/9/12 18:46
+ */
+@Component
+public class RouteCustomer {
+
+    @RabbitListener(bindings = { // bindings：绑定交换机和队列
+            @QueueBinding(
+                    value = @Queue, // 不指定队列名生产临时队列
+                    exchange = @Exchange(value = "route", type = "direct"), // 绑定交换机
+                    key = {"info","error","warn"} // routeKey 数组
+            )
+    })
+    public void customer1(String message) {
+        System.out.println("message1 = " + message);
+    }
+
+    @RabbitListener(bindings = { // bindings：绑定交换机和队列
+            @QueueBinding(
+                    value = @Queue, // 不指定队列名生产临时队列
+                    exchange = @Exchange(value = "route", type = "direct"), // 绑定交换机
+                    key = {"error"}
+            )
+    })
+    public void customer2(String message) {
+        System.out.println("message2 = " + message);
+    }
+}
+```
+
+### 4.5.3、测试
+
+**发送info消息**
+
+![image-20200912185821806](image-20200912185821806.png)
+
+![image-20200912185835769](image-20200912185835769.png)
+
+**发送error消息**
+
+![image-20200912185911337](image-20200912185911337.png)
+
+![image-20200912185936423](image-20200912185936423.png)
+
+## 4.6、Topic
+
+### 4.6.1、生产者
+
+```java
+// 注入RabbitTemplate
+@Autowired
+private RabbitTemplate rabbitTemplate;
+
+// topic 动态路由
+@Test
+void topic() {
+    rabbitTemplate.convertAndSend("topic","user.save","user.save路由消息");
+}
+```
+
+### 4.6.2、消费者
+
+```java
+package com.zh.topic;
+
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author Beloved
+ * @date 2020/9/12 19:13
+ */
+@Component
+public class TopicCustomer {
+
+    @RabbitListener(bindings = {
+            @QueueBinding(
+                    value = @Queue,
+                    exchange = @Exchange(name = "topic",type = "topic"),
+                    key = {"user.*"}
+            )
+    })
+    public void customer1(String message) {
+        System.out.println("message1 = " + message);
+    }
+
+    @RabbitListener(bindings = {
+            @QueueBinding(
+                    value = @Queue,
+                    exchange = @Exchange(name = "topic",type = "topic"),
+                    key = {"user.#"}
+            )
+    })
+    public void customer2(String message) {
+        System.out.println("message2 = " + message);
+    }
+}
+```
+
+### 4.6.3、测试
+
+**发布user.save消息**
+
+![image-20200912190457367](image-20200912190457367.png)
+
+![image-20200912191739176](image-20200912191739176.png)
+
+**发布user.save.aaa消息**
+
+![image-20200912191831970](image-20200912191831970.png)
+
+![image-20200912191903096](image-20200912191903096.png)
