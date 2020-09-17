@@ -1656,4 +1656,867 @@ Hystrix是一个用于处理分布式系统的延迟和容错的开源库，在�
 
 “断路器”本身是一种开关装置，当某个服务单元发生故障之后，通过断路器的故障监控（类似熔断保险丝），**向调用方返回一个服务预期的，可处理的备选响应（FallBack），而不是长时间的等待或者抛出调用方法无法处理的异常，这样就可以保证了服务调用方的线程不会被长时间**，不必要的占用，从而避免了故障在分布式系统中的蔓延，乃至雪崩
 
- 
+## 8.2、服务熔断
+
+熔断机制是应对雪崩效应的一中微服务链路保护机制
+
+当扇出链路的某个微服务不可用或者响应时间太长时，会进行服务的降级，**进而熔断该节点微服务的调用，快速返回错误的响应信息。**当检测到该节点微服务调用响应正常后恢复调用链路。在SpringCloud框架里熔断机制通过Hystrix实现。Hystrix会监控微服务间调用的状况，当失败的调用到一定阈值，缺省是5秒内调用20次调用失败就会启动熔断机制。
+
+熔断机制的注解是`@HystrixCommand`
+
+### 8.2.1、环境搭建
+
+**新建SpringCloud-provider-dept-hystrix-8000**
+
+拷贝SpringCloud-provider-dept-8000代码
+
+ 修改：
+
+- 启动类名称
+- 服务名称
+
+### 8.2.2、pom
+
+添加依赖
+
+```xml
+<!--Hystrix-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+```
+
+### 8.2.3、@HystrixCommand
+
+**在Controller上添加`@HystrixCommand`注解指定异常后如何处理**
+
+**fallbackMethod：指定异常后的回调方法**
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/13 17:29
+ */
+@RestController
+public class DeptController {
+
+    @Autowired
+    private DeptService deptService;
+
+    /*
+     * 使用Hystrix进行服务熔断
+     * 当服务发生异常，进入备用方案
+     * @HystrixCommand
+     *  fallbackMethod：失败的调用方法
+     */
+    @GetMapping("/dept/get/{id}")
+    @HystrixCommand(fallbackMethod = "hystrixGet")
+    public Dept findById(@PathVariable("id") Long id){
+        Dept dept = deptService.findById(id);
+
+        if (dept == null){
+            throw new RuntimeException("不存在该用户，信息无法找到");
+        }
+
+        return dept;
+    }
+
+    // 备用方案 当服务发生异常，调用次方法，返回一个模拟数据
+    public Dept hystrixGet(@PathVariable("id") Long id){
+
+        Dept dept = new Dept();
+        dept.setId(id);
+        dept.setDname("没有该用户");
+        dept.setDb_source("no this db");
+        return dept;
+    }
+}
+```
+
+### 8.2.4、主启动
+
+在主启动类上添加注解`@EnableCircuitBreaker`开启对熔断的支持
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/13 17:33
+ */
+@SpringBootApplication
+@EnableEurekaClient // 在服务启动后自动注册到Eureka中
+@EnableDiscoveryClient // 服务发现
+@EnableCircuitBreaker // 添加对服务熔断的支持
+public class HystrixDeptProvider_8000 {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HystrixDeptProvider_8000.class,args);
+    }
+}
+```
+
+### 8.2.5、测试
+
+- 启动Eureka集群
+
+- 启动SpringCloud-provider-dept-hystrix-8000
+
+- 启动SpringCloud-consumer-dept-8080
+- 访问：http://localhost:8080/consumer/dept/get/11
+
+![image-20200917163201834](image-20200917163201834.png)
+
+### 8.2.6、总结
+
+服务熔断：一般是某个服务故障或者异常引起，类似现实世界中的“保险丝”，当某个异常条件触发，直接熔断整个服务，而不是一直等到此服务超时
+
+## 8.3、服务降级
+
+整体资源快不够了，将某些不重要的服务关闭，给高压服务留出资源，等高峰期过去，在开启
+
+**服务降级处理是在客户端实现完成，与服务端没有关系**
+
+### 8.3.1、修改springcloud-api工程
+
+**根据已经有的DeptClientService接口新建一个实现了FallbackFactory接 口的类DeptClientServiceFallbackFactory**
+
+**实现`create`方法，返回服务接口（DeptClientService）的实现（降级处理）**
+
+![image-20200917163417465](image-20200917163417465.png)
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/14 15:06
+ *
+ * 服务降级
+ * 对整合service进行操作
+ */
+@Component
+public class DeptClientServiceFallbackFactory implements FallbackFactory<DeptClientService> {
+
+    @Override
+    public DeptClientService create(Throwable cause) {
+        return new DeptClientService() {
+            @Override
+            public Dept findById(Long id) {
+                Dept dept = new Dept();
+                dept.setId(id);
+                dept.setDname("该服务以降级，被关闭");
+                dept.setDb_source("没有数据");
+                return dept;
+            }
+
+            @Override
+            public List<Dept> findAll() {
+                return null;
+            }
+        };
+    }
+}
+```
+
+### 8.3.2、SpringCloud-consumer-dept-feign-8080
+
+yaml文件中配置服务降级的开启
+
+```yaml
+# 开启服务降级
+feign:
+  hystrix:
+    enabled: true
+```
+
+### 8.3.3、测试
+
+- 启动eureka集群 
+
+- 启动SpringCloud-provider-dept-hystrix-8000 
+
+- 启动SpringCloud-consumer-dept-feign-8080
+
+- 正常访问测试
+
+  - http://localhost:8080/consumer/dept/get/1
+
+  ![image-20200917164209766](image-20200917164209766.png)
+
+- 故意关闭微服务启动 SpringCloud-provider-dept-hystrix-8000 
+
+- 再次访问：http://localhost:8080/consumer/dept/get/1
+
+  - 此时服务端provider已经down了，但是我们做了服务降级处理，让客户端在服务端不可用时 也会获得提示信息而不会挂起耗死服务器。
+
+  ![image-20200917164311362](image-20200917164311362.png)
+
+### 8.3.4、总结
+
+服务降级：所谓降级，一般是从整体负荷考虑，就是当某个服务熔断之后，服务器将不在被调用，此时客户端可以自己准备一个本地的fallback回调，返回一个缺省值。这样做，虽然服务水平下降，但是比服务器直接宕掉好
+
+## 8.4、服务监控
+
+**服务监控HystrixDashboard**
+
+除了隔离依赖服务的调用以外，Hystrix还提供了准实时的调用监控（Hystrix Dashboard），Hystrix会持续地记录所有通过Hystrix发起的请求的执行信息，并以统计报表和图形的形式展示给用户，包括每秒执行多少请求，多少成功，多少失败等等。
+
+Netflix通过hystrix-metrics-event-stream项目实现了对以上指标的监控，SpringCloud也提供了Hystrix Dashboard的整合，对监控内容转化可视化和界面
+
+![image-20200917165312192](image-20200917165312192.png)
+
+新建SpringCloud-consumer-hystrrix-dashboard-8888工程
+
+### 8.4.1、pom
+
+复制8080的依赖，新增监控依赖
+
+```xml
+<!--Hystrix-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix-dashboard</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+```
+
+### 8.4.2、application.yml
+
+**设置监控的服务**
+
+```yaml
+server:
+  port: 8888
+
+# 访问监视页面报 Unable to connect to Command Metric Stream.
+# 可以在监视项目的application.yml中添加配置
+hystrix:
+  dashboard:
+    proxy-stream-allow-list: "*"
+```
+
+### 8.4.3、主启动
+
+添加注解`@EnableHystrixDashboard`开启监控页面
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/14 20:51
+ */
+@SpringBootApplication
+@EnableHystrixDashboard // 开启监控页面
+public class DeptConsumerDashboard_8888 {
+
+    /*
+     *  想在dashboard里监控某个服务 这个服务本身得先 主启动类上@EnableCircuitBreaker 开启熔断开关
+     *  然后注入一个ServletBean
+     *  同时这个服务的控制器里,必须有@HystrixCommand的注解，
+     *  用来标识要把哪些接口方法展示在dashboard上
+     */
+    public static void main(String[] args) {
+        SpringApplication.run(DeptConsumerDashboard_8888.class,args);
+    }
+
+}
+```
+
+### 8.4.4、Provider
+
+**所有的Provider微服务提供类(8001/8002/8003) 都需要监控依赖配置**
+
+```xml
+<!--actuator完善监控信息-->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+### 8.4.5、配置提供者
+
+**在所有使用熔断器的未复为上配置ServletRegistrationBean**
+
+在SpringCloud-provider-dept-hystrix-8000中配置Bean
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/13 17:33
+ */
+@SpringBootApplication
+@EnableEurekaClient // 在服务启动后自动注册到Eureka中
+@EnableDiscoveryClient // 服务发现
+@EnableCircuitBreaker // 添加对服务熔断的支持
+public class HystrixDeptProvider_8000 {
+
+    public static void main(String[] args) {
+        SpringApplication.run(HystrixDeptProvider_8000.class,args);
+    }
+
+    // 增加一个Servlet
+    @Bean
+    public ServletRegistrationBean servletRegistrationBean(){
+        ServletRegistrationBean registrationBean = new ServletRegistrationBean(new HystrixMetricsStreamServlet());
+        registrationBean.addUrlMappings("/actuator/hystrix.stream");
+        return registrationBean;
+    }
+}
+```
+
+### 8.4.6、启动测试
+
+启动SpringCloud-provider-dept-hystrix-8000该微服务监控消费端
+
+http://localhost:8888/hystrix
+
+![image-20200917170217184](image-20200917170217184.png)
+
+**测试Ping：**
+
+- 启动eureka集群
+
+- 启动SpringCloud-consumer-hystrrix-dashboard-8888
+
+- 启动 SpringCloud-provider-dept-hystrix-8000
+
+- 访问：http://localhost:8000/dept/get/1
+
+  ![image-20200917170839974](image-20200917170839974.png)
+
+- 访问：http://localhost:8000/actuator/hystrix.stream【查看1秒一动的数据流】
+
+  ![image-20200917170931579](image-20200917170931579.png)
+
+**监控测试：**
+
+- 多次刷新：http://localhost:8000/dept/get/1
+
+- 监控页面，添加监控地址：http://localhost:8888/hystrix
+
+  ![image-20200917171152396](image-20200917171152396.png)
+
+  - Delay：该参数用来控制服务器上伦循监控信息的延迟时间，默认为2000毫秒，可以通过配置该属性来降低客户端的网络和CPU消耗
+  - Title：该参数对应了头部标题HystrixStream之后的内容，默认会使用具体监控实例URL，可以配置该信息来展示合适的标题
+
+- 监控结果
+
+  ![image-20200917171628261](image-20200917171628261.png)
+
+### 8.4.7、监控页面分析
+
+**7色：**
+
+![image-20200917172124568](image-20200917172124568.png)
+
+**1圈：**
+
+实心圆：公有两种含义，他通过颜色的变化代表了实例的健康程度
+
+健康程度：绿色>黄色>橙色>红色
+
+除了颜色的变化之外，它的大小也会根据实例的请求流量发生变化，浏览越大实心圆越大
+
+通过实心圆可以快速发现**故障实例和高压实例**
+
+![image-20200917172359140](image-20200917172359140.png)
+
+**1线：**
+
+曲线：用来记录2分钟内流量的相对变化，可以通过它来观察流量的上升和下降趋势
+
+![image-20200917173006319](image-20200917173006319.png)
+
+**示例：**
+
+![image-20200917173039403](image-20200917173039403.png)
+
+# 9、Zuul路由网关
+
+## 9.1、概述
+
+Zuul包含了对请求的路由和过滤两个最主要的功能：
+
+其中路由功能负责将外部请求转发到具体的微服务实例上，是实现外部访问统一入口的基础，而过滤器功能则负责对请求的处理过程进行干预，是实现请求校验，服务聚合等功能的基础。Zuul和Eureka进行整合，将Zuul自身注册为Eureka服务治理下的应用，同时从Eureka中获得其他微服务的消息，也即以后的访问微服务都是通过Zuul跳转后获得的
+
+**注意：Zuul服务最终还是会注册进Eureka**
+
+三大功能：代理+路由+过滤
+
+**官网文档：https://github.com/Netflix/zuul**
+
+## 9.2、环境搭建
+
+新建SpringCloud-zuul-9527工程
+
+### 9.2.1、pom
+
+```xml
+<!--Zuul-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-zuul</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+<!-- zuul网关的重试机制，不是使用ribbon内置的重试机制
+   是借助spring-retry组件实现的重试
+   开启zuul网关重试机制需要增加下述依赖
+ -->
+<dependency>
+    <groupId>org.springframework.retry</groupId>
+    <artifactId>spring-retry</artifactId>
+</dependency>
+
+
+<!--Hystrix-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-hystrix-dashboard</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+
+
+<!-- Eureka -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-eureka</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+
+<!-- Ribbon -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-ribbon</artifactId>
+    <version>1.4.7.RELEASE</version>
+</dependency>
+
+
+<dependency>
+    <groupId>com.zh</groupId>
+    <artifactId>SpringCloud-api</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+### 9.2.2、application.yml
+
+```yaml
+server:
+  port: 9527
+
+spring:
+  application:
+    name: SpringCloud-zuul
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:7001/eureka/,http://localhost:7002/eureka/,http://localhost:7003/eureka/
+  instance:
+    instance-id: zuul—9527 # 修改Eureka上的默认描述信息
+    prefer-ip-address: true # 为true可以显示服务的ip地址
+
+
+# info信息
+info:
+  app.name: SpringCloud-zuul
+  user:
+    name: zhh
+    email: 1425279634@qq.com
+```
+
+### 9.2.3、主启动
+
+使用注解**@EnableZuulProxy**开启Zuul
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/14 21:55
+ */
+@SpringBootApplication
+@EnableZuulProxy  // 开启zuul代理
+public class ZuulApplication_9527 {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ZuulApplication_9527.class,args);
+    }
+
+}
+```
+
+### 9.2.4、启动测试
+
+**启动：**
+
+- Eureka集群
+
+- 启动服务提供者SpringCloud-provider-dept-8000
+
+- 启动Zuul路由
+
+- 访问 ：http://localhost:7001/
+
+  ![image-20200917191620247](image-20200917191620247.png)
+
+**测试：**
+
+- 不使用路由：http://localhost:8000/dept/list
+
+  ![image-20200917191728946](image-20200917191728946.png)
+
+- 使用路由访问：http://localhost:9527/springcloud-provider-dept/dept/list
+
+  - 网关 / 微服务名字 / 具体的服务
+
+  ![image-20200917191816497](image-20200917191816497.png)
+
+## 9.3、路由访问映射规则
+
+http://localhost:9527/springcloud-provider-dept/dept/list 这样去访问的话，就暴露了我 们真实微服务的名称！
+
+**增加Zuul路由映射配置**
+
+`zuul.routes`：的值是k-v
+
+- k：服务名
+- v：映射路径
+
+```yaml
+zuul:
+  routes: # 值是k-v k随便写
+    dept.serviceId: springcloud-provider-dept # 原来的服务id
+    dept.path: /dept/** # 自己定义的
+```
+
+- 配置前访问：http://localhost:9527/springcloud-provider-dept/dept/list
+- 配置后访问：http://localhost:9527/dept/dept/list
+
+问题：原来路径还可以访问，不合适
+
+**忽略服务名访问**
+
+```yaml
+zuul:
+  routes: # 值是k-v k随便写
+    dept.serviceId: springcloud-provider-dept # 原来的服务id
+    dept.path: /dept/** # 自己定义的
+  ignored-services: springcloud-provider-dept # 忽略这个服务，不能使用这个服务
+```
+
+**批量忽略服务名访问**
+
+```yaml
+zuul:
+  routes: # 值是k-v k随便写
+    dept.serviceId: springcloud-provider-dept # 原来的服务id
+    dept.path: /dept/** # 自己定义的
+  ignored-services: "*"  # *忽略全部服务名
+```
+
+**配置统一前缀**
+
+```yaml
+zuul:
+  routes: # 值是k-v k随便写
+    dept.serviceId: springcloud-provider-dept # 原来的服务id
+    dept.path: /dept/** # 自己定义的
+  ignored-services: "*"  # *忽略全部服务名
+  prefix: /zh # 公共前缀
+```
+
+访问必须加上统一前缀，否则不能访问
+
+# 10、Config分布式配置
+
+**官方文档：https://www.springcloud.cc/spring-cloud-dalston.html#_spring_cloud_config**
+
+## 10.1、概述
+
+**分布式系统面临的--配置文件的问题**
+
+微服务意味着要将单体应用中的业务拆分成一个个自服务，每个服务的粒度相对较小，因此系统中会出现大量的服务，由于每个服务都需要必要的配置信息才能运行，每一个微服务都自己带一个application.yml，修改配置非常麻烦，所以一套集中式的，动态的配置管理设施是必不可少的。SpringCloud提供了ConfigServer来解决这个问题。
+
+**SPringCloud分布式配置中心**
+
+![image-20200917193218588](image-20200917193218588.png)
+
+Spring Cloud Config为微服务结构中的微服务提供集中化的外部配置支持，配置服务器为**各个不同微服务应用**的所有环节提供一个**中心化的外部配置**
+
+Spring Cloud Config分为**服务端**和**客户端**两部分
+
+服务端也称为**分布式配置中心**，它是一个独立的微服务应用，用来连接配置服务器并为客户端提供获取配置信息，加密，解密信息等访问接口。
+
+客户端则是通过指定的配置中心来管理应用资源，以及与业务相关的配置内容，并在启动的时候从配置中心获取和加载配置信息。配置服务器默认采用git来存储配置信息，有助于对配置环境进行版本管理。并且可以通过git客户端工具来方便的管理和访问配置内容
+
+- 集中管理配置文件
+- 不同环境，不同配置，动态化的配置更新，分环境部署，比如 /dev /test /prod /beta /release
+- 运行期间动态调整配置，不在需要在每个服务部署的机器上编写配置文件，服务会向配置中心统一拉取配置自己的信息
+- 当配置发生变动时，服务不需要重启，即可感知到配置的变化，并应用新的配置
+- 将配置信息以REST接口的形式暴露
+
+存储形式：GIT、SVN、本地存储
+
+## 10.2、Git环境搭建
+
+GitHub或GitEE创建远程仓库：https://gitee.com/beloved_zh/config
+
+创建`config-client.yml`文件
+
+示例：https://gitee.com/beloved_zh/config/blob/master/config-client.yml
+
+```yaml
+spring:
+  profiles:
+    active: dev
+
+---
+spring:
+  profiles: dev
+  application:
+    name: SpringCloud-config-client-3355
+server:
+  port: 3355
+
+
+
+---
+spring:
+  profiles: test
+  application:
+    name: SpringCloud-config-client-3356
+server:
+  port: 3356
+```
+
+## 10.3、创建ConfigServer
+
+创建SpringCloud-config-server-3344服务
+
+### 10.3.1、pom
+
+```xml
+<!-- spring-cloud-config-server -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-config-server</artifactId>
+    <version>2.2.5.RELEASE</version>
+</dependency>
+
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+```
+
+### 10.3.2、application.yml
+
+配置远程仓库地址
+
+`spring.cloud.config.server.git.uri=远程仓库地址`
+
+**注意：uri是http不是ssh**
+
+```yaml
+server:
+  port: 3344
+
+spring:
+  application:
+    name: springcloud-config-server
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/beloved-zh/config.git
+```
+
+### 10.3.3、主启动
+
+**注解@EnableConfigServer开启配置服务**
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/15 9:24
+ */
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServer_3344 {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServer_3344.class,args);
+    }
+
+}
+```
+
+### 10.3.4、启动测试
+
+访问：http://localhost:3344/config-client.yml
+
+![image-20200917195831409](image-20200917195831409.png)
+
+http://localhost:3344/config-client-dev.yml
+
+![image-20200917195906668](image-20200917195906668.png)
+
+### 10.3.5、访问方式
+
+![image-20200917195952390](image-20200917195952390.png)
+
+## 10.4、客户端
+
+创建SpringCloud-config-client-3355客户端
+
+### 10.4.1、pom
+
+```xml
+<!-- config -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-config</artifactId>
+    <version>2.2.5.RELEASE</version>
+</dependency>
+
+<!--actuator完善监控信息-->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+```
+
+### 10.4.2、bootstrap.yml
+
+`bootstrap.yml`：也是能被SpringBoot识别的，是系统级别的配置
+
+主要是从Git上拉去远程的配置信息
+
+- name：资源名称，没有后缀
+- profile：配置环境选择
+- label：Git分支选择
+- uri：ConfigServer地址
+
+```yaml
+# 系统级别配置
+# 获取git远程配置
+
+spring:
+  cloud:
+    config:
+      name: config-client # git上的资源名称，不需要后缀
+      profile: dev # 配置环境选择
+      label: master # git分支选择
+      uri: http://localhost:3344 # config-server地址
+```
+
+### 10.4.3、application.yml
+
+`application.yml`：是用户级别的配置
+
+application.yml和bootstrap.yml可以同时配置
+
+配置一些远程配置中没有的配置
+
+此处示例远程配置文件足够
+
+### 10.4.4、主启动
+
+```java
+/**
+ * @author Beloved
+ * @date 2020/9/15 11:16
+ */
+@SpringBootApplication
+public class ConfigClient_3355 {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigClient_3355.class,args);
+    }
+}
+```
+
+### 10.4.5、启动测试
+
+- 先启动ConfigServer
+
+- 观察远程配置文件
+
+  ![image-20200917200907647](image-20200917200907647.png)
+
+- 本地没有配置端口，选择的是远程dev环境
+
+- 启动测试
+
+  - 查看控制台，远程配置文件生效，启动端口3355
+
+    ![image-20200917201117502](image-20200917201117502.png)
+
+  - 访问：http://localhost:3355/       启动成功
+
+  ![image-20200917201148794](image-20200917201148794.png)
+
+  ## 10.4、测试
+
+  新建SpringCloud-config-dept-8001工程。使用远程配置
+
+  复制SpringCloud-provider-dept-8001工程。删除application.yml
+
+  **新增pom**
+
+  ```xml
+  <!-- config -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-config</artifactId>
+      <version>2.2.5.RELEASE</version>
+  </dependency>
+  ```
+
+  **远程仓库新建`config-dept.yml`文件：https://gitee.com/beloved_zh/config/blob/master/config-dept.yml**
+
+  **bootstrap.yml**
+
+  ```yaml
+  # 系统级别配置
+  # 获取git远程配置
+  
+  spring:
+    cloud:
+      config:
+        name: config-dept # git上的资源名称，不需要后缀
+        profile: test # 配置环境选择
+        label: master # git分支选择
+        uri: http://localhost:3344 # config-server地址
+  ```
+
+  **application.yml**
+
+  ```yaml
+  spring:
+    application:
+      name: SpringCloud-config-dept-8001
+  ```
+
+  **启动测试**
+
+  http://localhost:8001/dept/get/1
+
+  
+
+  
