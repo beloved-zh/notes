@@ -271,13 +271,307 @@ show variables like '%storage_engine%';
 
 # 2、索引优化分析
 
-## 2.1、常见JOIN查询
+## 2.1、SQL执行加载顺序
 
-## 2.2、索引简介
+**手写**
 
-## 2.3、性能分析
+```mysql
+SELECT DISTINCT
+	<select_list>
+FROM
+	<left_table> <join_type> JOIN <right_table> ON <join_condition>
+WHERE 
+	<where_condition>
+GROUP BY
+	<group_by_list>
+HAVING
+	<having_condition>
+ORDER BY
+	<order_by_condition>
+LIMIT <limit_number>
+```
 
-## 2.4、索引优化
+**机读**
+
+```mysql
+FROM <left_table>
+ON <join_condition>
+<join_type> JOIN <right_table>
+WHERE <where_condition>
+GROUP BY <group_by_list>
+HAVING <having_condition>
+SELECT 
+DISTINCT <select_list>
+ORDER BY <order_by_condition>
+LIMIT <limit_number>
+```
+
+**总结**
+
+![image-20200928141024402](image-20200928141024402.png)
+
+## 2.2、常见JOIN查询
+
+**JOIN图解：**
+
+<img src="sql-join.png" alt="img" style="zoom: 80%;" />
+
+**创建数据：**
+
+```mysql
+CREATE TABLE `tb_dept` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '部门主键',
+  `deptName` varchar(30) DEFAULT NULL COMMENT '部门名称',
+  `locAdd` varchar(40) DEFAULT NULL COMMENT '楼层',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+
+CREATE TABLE `tb_emp` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '员工主键',
+  `name` varchar(20) DEFAULT NULL COMMENT '员工姓名',
+  `deptId` int(11) DEFAULT NULL COMMENT '部门外键',
+  PRIMARY KEY (`id`),
+  KEY `fk_dept_id` (`deptId`)
+  # CONSTRAINT `fk_dept_id` FOREIGN KEY (`deptId`) REFERENCES `tb_dept` (`id`) COMMENT '部门外键设置, 已经注释掉。'
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+INSERT INTO tb_dept(deptName,locAdd) VALUES ('开发部', '11');
+INSERT INTO tb_dept(deptName,locAdd) VALUES ('人事部', '12');
+INSERT INTO tb_dept(deptName,locAdd) VALUES ('销售部', '13');
+INSERT INTO tb_dept(deptName,locAdd) VALUES ('研发部', '14');
+INSERT INTO tb_dept(deptName,locAdd) VALUES ('市场部', '15');
+
+INSERT INTO tb_emp(name,deptId) VALUES ('张三', '1');
+INSERT INTO tb_emp(name,deptId) VALUES ('李四', '1');
+INSERT INTO tb_emp(name,deptId) VALUES ('王五', '1');
+INSERT INTO tb_emp(name,deptId) VALUES ('小明', '2');
+INSERT INTO tb_emp(name,deptId) VALUES ('小马', '2');
+INSERT INTO tb_emp(name,deptId) VALUES ('小红', '3');
+INSERT INTO tb_emp(name,deptId) VALUES ('小丁', '4');
+INSERT INTO tb_emp(name,deptId) VALUES ('小西', '51');
+```
+
+### 2.2.1、Inner JOIN
+
+![img](1548731841-2663-INNER-JOIN.png)
+
+```mysql
+select * from tb_dept d inner join tb_emp e on d.id = e.deptId;
+```
+
+![image-20200928143542397](image-20200928143542397.png)
+
+### 2.2.2、Left JOIN
+
+![img](1548731843-2683-LEFT-JOIN.png)
+
+```mysql
+ select * from tb_dept d left join tb_emp e on d.id = e.deptId;
+```
+
+
+
+![image-20200928143717204](image-20200928143717204.png)
+
+### 2.2.3、Right JOIN
+
+![img](1548731845-3187-RIGHT-JOIN.png)
+
+```mysql
+select * from tb_dept d right join tb_emp e on d.id = e.deptId;
+```
+
+![image-20200928143845064](image-20200928143845064.png)
+
+### 2.2.4、Left Excluding JOIN
+
+![img](1548731849-9936-LEFT-EXCLUDING-JOIN.png)
+
+```mysql
+select * from tb_dept d left join tb_emp e on d.id = e.deptId where e.id is null;
+```
+
+![image-20200928144131241](image-20200928144131241.png)
+
+### 2.2.5、Right Excluding JOIN
+
+![img](1548731850-7833-RIGHT-EXCLUDING-JOIN.png)
+
+```mysql
+ select * from tb_dept d right join tb_emp e on d.id = e.deptId where d.id is null;
+```
+
+![image-20200928144544797](image-20200928144544797.png)
+
+### 2.2.6、Outer JOIN
+
+![img](1548731847-7074-FULL-OUTER-JOIN.png)
+
+**MYSQL不支持**`FULL OUTER JOIN`关键字
+
+```mysql
+select * from tb_dept d full outer join tb_emp e on d.id = e.deptId;
+```
+
+![image-20200928145101658](image-20200928145101658.png)
+
+但是可以通过左连接和右连接达到效果
+
+**使用union（合并去重）关键字解决中间公有部分**
+
+```mysql
+select * from tb_dept d left join tb_emp e on d.id = e.deptId
+union
+select * from tb_dept d right join tb_emp e on d.id = e.deptId;
+```
+
+![image-20200928145252560](image-20200928145252560.png)
+
+### 2.2.7、Outer Excluding JOIN
+
+![img](1548731854-3464-OUTER-EXCLUDING-JOIN.png)
+
+```mysql
+select * from tb_dept d left join tb_emp e on d.id = e.deptId where e.id is null
+union
+select * from tb_dept d right join tb_emp e on d.id = e.deptId where d.id is null;
+```
+
+![image-20200928145634434](image-20200928145634434.png)
+
+## 2.3、索引简介
+
+### 2.3.1、简介
+
+官方定义：索引（Index）是帮助MYSQL高效获取数据的数据结构。索引的目的是在于提高查询效率，可以类比字典。**索引是数据结构**
+
+**排好序的快速查找数据结构：**
+
+- 在数据之外，**数据库系统还维护着满足特定查找算法的数据结构**，这些数据结构以某种方式引用（指向）数据，这样就可以在数据结构上实现高级查找算法。这种数据结构，就是索引。
+
+  ![image-20200928162046846](image-20200928162046846.png)
+
+  - 为了加快Col2的查找，可以维护一个右边所示的二叉查找数，每个节点分别包含索引键值和一个指向对应数据记录的物理地址的指针，这样就可以运用二叉查找在一定复杂度内获取到相应数据，快速检索出符合条件的记录
+
+索引本身也很大，不可能全部存储在内存中，因此索引是以索引文件的形式存储在磁盘上
+
+**平常所说的索引，如果没有特别说明，都是指B树（多路搜素树，并不一定是二叉的）结构组织的索引。**其中聚集索引、次要索引、复合索引、前缀索引、唯一索引默认都是使用B+树索引，统称索引
+
+### 2.3.2、优势劣势
+
+**优势：**
+
+- 提高数据检索效率，降低数据量的IO成本
+- 通过索引列对数据进行排序，降低数据排序的成本，降低了CPU的消耗
+
+**劣势：**
+
+- 实际上索引也是一张表，该表保存了主键与索引字段，并指向实体表的记录，所以索引列也是要占用空间的
+- 虽然索引大大提高了查询速度，同时却会降低更新表的速度，如对表进行INSERT、UPDATE、DELETE。因为更新表时，MYSQL不仅要保存数据，还要保存索引文件每次更新添加了索引列的字段，都会调整用为更新所带来的键值变化后的索引信息
+- 索引只是提高效率的一个因素，如果有大数据量的表，就要花时间研究建立合适的索引，或优化
+
+### 2.3.3、索引分类和创建
+
+- **普通索引(normal)：**没有任何约束，主要用于提高查询效率
+- **唯一索引(UNIQUE)：**在普通索引的基础上增加了数据唯一性的约束，可以有多个
+- **主键索引(primary key)：**主键索引在唯一索引的基础上增加了不为空的约束，也就是 NOT NULL+UNIQUE，只能有一个
+- **全文索引(FULLTEXT)：**MySQL 自带的全文索引只支持英文。
+
+**基本语法：**
+
+- **创建：**
+
+  ```mysql
+  -- 方式一
+  CREATE [UNIQUE] INDEX 索引名 ON 表名(column_list);
+  -- 方式二
+  ALTER TABLE 表名 ADD [UNIQUE] INDEX 索引名 ON (column_list);
+  ```
+
+- **删除：**
+
+  ```mysql
+  DROP INDEX 索引名 ON 表名
+  ```
+
+- **查看：**
+
+  ```mysql
+  SHOW INDEX FROM 表名
+  ```
+
+- **ALTER命令：**
+
+  ```mysql
+  -- 添加一个主键，索引值必须是唯一的且不能为NULL
+  ALTER TABLE 表名 ADD PRIMARY KEY(column_list);
+  
+  -- 创建索引的值必须是唯一的（除了NULL外，NULL可能会出现多次）
+  ALTER TABLE 表名 ADD UNIQUE 索引名 (column_list);
+  
+  -- 添加普通索引，索引值可出现多次
+  ALTER TABLE 表名 ADD INDEX 索引名 (column_list);
+  
+  -- 指定索引为FULLTEXT，用于全文检索
+  ALTER TABLE 表名 ADD FULLTEXT 索引名 (column_list);
+  ```
+
+### 2.3.4、索引结构
+
+- Hash索引
+
+- full-text全文索引
+
+- R-Tree索引
+
+- BTree索引
+
+  <img src="image-20200928170219796.png" alt="image-20200928170219796" style="zoom:80%;" />
+
+初始化介绍：
+
+一颗b+树，浅蓝色的块称之为一个磁盘块，每个磁盘块包含几个数据项（深蓝色所示）和指示（黄色所示），如磁盘块1包含数据项17和35，包含指针P1、P2、P3
+
+P1表示小于17的磁盘块，P2表示在17和35之间的磁盘块，P3表示大于35的磁盘块
+
+真实的数据存在于叶子节点，即3、5、9、10、13、15、28、19、29、36、60、75、79、90、99
+
+非叶子节点不存储真实数据，只存储指引搜索方向的数据项，如17、35并不真实存在于数据表中。
+
+查找过程：
+
+如果要查找数据项29，那么首先会把磁盘1由磁盘加载到内存，此时发生一次IO，在内存中用二分查找确定29在17和35之间，锁定磁盘块1的P2指针，内存时间因为非常短（相比磁盘的IO）可以忽略不计，通过磁盘块1的P2指针的磁盘地址吧磁盘块3由磁盘加载到内存，发生第二次IO，29在26和30之间，磁盘锁定块3的P2指针，通过指针加载磁盘块8到内存，发生第三次IO，同时内存中做二分查找找到29，结束查询，总计三次IO
+
+真实的情况是，3层的b+树可以表示上百万的数据，如果上百万的数据查找只需要三次IO，性能提高将是巨大的，如果没有索引，每个数据项都要发生一次IO，那么总共需要百万次IO，成本是非常高的
+
+### 2.3.5、索引创建的情况
+
+**适合条件：**
+
+- 主键自动建立唯一索引
+- 频繁作为查询条件的字段应该创建索引
+- 查询中与其它表关联的字段，外键关系建立索引
+- WHERE条件里用不到的字段不创建索引
+- 单键/组合索引的选择：在高并发下创建组合索引
+- 查询中排序的字段，排序字段若通过索引去访问将大大提高排序速度
+- 查询中统计或者分组字段
+
+**不适合条件：**
+
+- 表记录太少
+- 频繁更新的字段不适合创建索引。因为每次更新不单单是更新了记录还会更新索引
+- 经常增删改的表
+  - 提高了查询速度，同时却会降低更新表的速度，如对表进行INSERT、UPDATE、DELETE。因为更新表时，MYSQL不仅要保存数据，还要保存索引文件
+- 数据重复且分布平均的表字段。如果某个数据列包含许多重复的内容，建立索引就没有太大的实际效果
+  - 假如一个表由10万行记录，有一个字段A只有T和F两种值，且每个值的分布概率不约为50%，那么对这种表A字段建索引一般不会提高数据库的查询速度
+  - 索引的选择性是指索引列中不同值的数目与表中记录数的比，如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。一个索引的选择性接近于1，这个索引的效率就是越高 vcf
+
+## 2.4、性能分析
+
+
+
+## 2.5、索引优化
 
 # 3、查询截取分析
 
