@@ -569,6 +569,148 @@ P1表示小于17的磁盘块，P2表示在17和35之间的磁盘块，P3表示�
 
 ## 2.4、性能分析
 
+### 2.4.1、MySql Query Optimizer
+
+- MySql中专门负责优化SELECT语句的优化器模块，主要功能：通过计算分析系统中收集到的统计信息，为客户端请求的Query提供它认为最优的执行计划（它认为最优的数据检索方式，不见得是程序员认为的，这部分最耗时间）
+- 当客户端向MySql请求一条Query，命令解析器模块完成请求分类，区别出是SELECT并转发给MySql Query Optimizer时，MySql Query Optimizer首先会对整条Query进行优化，处理掉一些常量表达式的预算，直接换算成常量值。并对Query中的查询条件进行简化和转换，如去掉一些无用或显而易见的条件、结构调整等。然后分析Query中的Hint信息，看显示Hint信息是否可以完全确定该Query的执行计划。如果没有Hint或Hint信息还不足以完全确定执行计划，则会读取所涉及对象的统计信息，根据Query进行写相应的计算分析，然后在得出最后的执行计划。
+
+**MySql常见瓶颈**
+
+- CPU：CPU在饱和的时候一般发生在数据装入内存或从磁盘上读取数据时候
+- IO：磁盘I/O瓶颈发生在装入数据远大于内存容量的时候
+- 服务器硬件的性能瓶颈：top、free、iostat、vmstat来查看系统的性能瓶颈
+
+### 2.4.2、Explain
+
+**Explain：使用Explain关键字可以模拟优化器执行SQL查询语句，从而知道MySql是如何处理SQL语句。分析查询语句或是表结构的性能瓶颈 **
+
+- 表的读取顺序
+- 数据读取操作的操作类型
+- 哪些索引可以使用
+- 哪些索引被实际使用
+- 表之间的使用
+- 每张表有多少行被优化器查询
+
+#### 2.4.2.1、使用
+
+**Explain +  SQL语句**
+
+```mysql
+explain select * from tb_dept;
+```
+
+![image-20200928220938859](image-20200928220938859.png)
+
+#### 2.4.2.2、名词字段解释
+
+##### id
+
+select查询的序列号，包含一组数字，表示查询中执行select子句或操作表的顺序
+
+- **id相同：执行顺序由上至下**
+
+  ```mysql
+   explain select * from tb_dept a, tb_emp b where a.id = b.deptId;
+  ```
+
+  ![image-20200928221730791](image-20200928221730791.png)
+
+  先加载a表在加载b表，按顺序
+
+- id不同：如果是子查询，id的序号会递增，**id值越大优先级越高，越先被执行**
+
+  ```mysql
+   explain select * from tb_emp 
+   where deptId = ( 
+       select id from tb_dept where id = 1 
+   );
+  ```
+
+  ![image-20200928222223056](image-20200928222223056.png)
+
+  先加载id值大的tb_dept表，在加载tb_emp表
+
+- id相同不同，同时存在
+
+  ```mysql
+  explain select * 
+  from tb_emp a,tb_dept b 
+  where a.deptId = b.id 
+  and  deptId = ( 
+      select id from tb_dept where id = 1 
+  );
+  ```
+
+  ![image-20200928222621609](image-20200928222621609.png)
+
+  id如果相同，可以认为是一组，从上往下顺序执行
+
+  在所有组中，id值越大，优先级越高，越先执行
+
+  先执行tb_dept表在按顺序执行b然后a表
+
+##### select_type
+
+**查询的类型，主要是用于区别普通查询、联合查询、子查询等的复杂查询**
+
+- **SIMPLE：**简单的select查询，查询中不包含子查询或者UNION
+
+  ```mysql
+   explain select * from tb_emp;
+  ```
+
+  ![image-20200928223826875](image-20200928223826875.png)
+
+- **PRIMARY：**查询中若包含任何复杂的子部分，最外层查询则被标记为
+
+  ```mysql
+  explain select * from tb_emp where deptId = ( select id from tb_dept where id = 1 );
+  ```
+
+  ![image-20200928223931499](image-20200928223931499.png)
+
+  PRIMARY是最后执行的
+
+- **SUBQUERY：**在SELECT或WHERE列表中包含了子查询
+
+  ```mysql
+  explain select * from tb_emp where deptId = ( select id from tb_dept where id = 1 );
+  ```
+
+  ![image-20200928224034125](image-20200928224034125.png)
+
+- **DERIVED：**在FROM列表中包含的子查询被标记为DERIVED（衍生），MYSQL会递归执行这些子查询，吧结果放在临时表里
+
+- **UNION：**若第二个SELECT出现在UNION之后，则被标记为UNION；若UNION包含在FROM子句的子查询中，外层SELECT将被标记为：DERIVED
+
+  ```mysql
+  explain select * from tb_emp a left join tb_dept b on a.deptId = b.id union select * from tb_emp a right join tb_dept b on a.deptId = b.id;
+  ```
+
+  ![image-20200928231337818](image-20200928231337818.png)
+
+- **UNION RESULT：**从UNION表获取结果的SELECT
+
+  ```mysql
+  explain select * from tb_emp a left join tb_dept b on a.deptId = b.id union select * from tb_emp a right join tb_dept b on a.deptId = b.id;
+  ```
+
+  ![image-20200928231401840](image-20200928231401840.png)
+
+##### table
+
+**显示这一行的数据是关于那张表的**
+
+##### type
+
+type显示的是**访问类型，结果值从最好到最坏依次是：**
+
+system > const > eq_ref > ref > fulltext > ref_or_null > idnex_merge > unique_subquery > index_subquery > range > index > ALL
+
+**常用的：system > const > eq_ref > ref  > range > index > ALL**
+
+一般来说，得保证查询至少达到**range**级别，最好达到**ref**
+
 
 
 ## 2.5、索引优化
