@@ -86,6 +86,8 @@ Github：https://github.com/antirez/redis
   **解决办法：**
 
   ```bash
+  
+  ```
 # 查看gcc版本是否在5.3以上，centos7.6默认安装4.8.5
   gcc -v
   # 升级gcc到5.3及以上,如下：
@@ -95,12 +97,12 @@ Github：https://github.com/antirez/redis
   scl enable devtoolset-9 bash
   需要注意的是scl命令启用只是临时的，退出shell或重启就会恢复原系统gcc版本。
   如果要长期使用gcc 9.3的话：
-  
+
   echo "source /opt/rh/devtoolset-9/enable" >>/etc/profile
   这样退出shell重新打开就是新版的gcc了
   以下其他版本同理，修改devtoolset版本号即可。
-  ```
-  
+
+
   **重新安装，如果所示安装成功**
 
   ![img](image-20200504135017727.png)
