@@ -581,3 +581,23 @@ server {
 }
 ```
 
+# 9、nginx代理后刷新显示404
+
+通过首页进入访问页面正常，F5刷新之后出现404错误
+
+原因是因为web单页面开发模式，只有一个index.html入口，其他路径是前端路由去跳转的，nginx没有对应这个路径，当然就是404了。
+配置如下
+
+```bash
+server {
+    listen          80;
+    server_name     beloved.ink;
+
+    location / {
+    	root    /usr/local/tmp/BXY/BXY_WEB;
+        index   index.html index.htm;
+    	try_files $uri $uri/ /index.html;
+    }
+}
+```
+在每个server块，添加`try_files $uri $uri/ /index.html;`配置可解决
